@@ -1,0 +1,287 @@
+"use client";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { PILARES, pilarKey, PilarKey } from "@/lib/pilares";
+import EditTareaModal from "@/components/EditTareaModal";
+
+export default function KanbanPage() {
+  return <Suspense fallback={<div>Cargando...</div>}><Kanban /></Suspense>;
+}
+
+const COLUMNAS = ["Sin empezar", "En progreso", "Completada", "Más tarde"];
+
+function normEstado(e?: string) {
+  if (!e) return "Sin empezar";
+  const l = e.toLowerCase();
+  if (l.includes("progreso")) return "En progreso";
+  if (l.includes("complet") || l.includes("hecho")) return "Completada";
+  if (l.includes("tarde") || l.includes("backlog")) return "Más tarde";
+  return "Sin empezar";
+}
+
+function venceInfo(fecha?: string | null) {
+  if (!fecha) return { txt: "sin fecha", color: "tx3", bg: "var(--bg3)" };
+  const d = Math.ceil((+new Date(fecha) - Date.now()) / 86400000);
+  const fmt = new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+  if (d < 0) return { txt: `${fmt} · vencido`, color: "red-t", bg: "var(--red-b)" };
+  if (d === 0) return { txt: `${fmt} · hoy`, color: "red-t", bg: "var(--red-b)" };
+  if (d === 1) return { txt: `${fmt} · mañana`, color: "red-t", bg: "var(--red-b)" };
+  if (d <= 7) return { txt: `${fmt} · ${d}d`, color: "amb-t", bg: "var(--amb-b)" };
+  return { txt: fmt, color: "tx2", bg: "var(--bg3)" };
+}
+
+function Kanban() {
+  const sp = useSearchParams();
+  const [tareas, setTareas] = useState<any[]>([]);
+  const [drag, setDrag] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<{ col: string; index: number } | null>(null);
+  const [filtroPilar, setFiltroPilar] = useState<PilarKey | "todos">("todos");
+  const [verNoAun, setVerNoAun] = useState(false);
+  const [quickAdd, setQuickAdd] = useState<Record<string, string>>({});
+  const [editId, setEditId] = useState<string | null>(null);
+  const [showFull, setShowFull] = useState(false);
+  const [nueva, setNueva] = useState<any>({
+    nombre: "", epica: "Profesional", tipo: "Tarea", estado: "Sin empezar",
+    prioridad: "Media", caracterVisibilidad: "Relevante",
+    fechaVencimiento: "", duracionMin: "", notas: "",
+  });
+
+  useEffect(() => {
+    const p = sp.get("pilar") as PilarKey | null;
+    if (p) setFiltroPilar(p);
+  }, [sp]);
+
+  async function cargar() {
+    const t = await fetch("/api/tareas").then(r => r.json());
+    setTareas(t);
+  }
+  useEffect(() => { cargar(); }, []);
+
+  const tareasFiltradas = tareas.filter(t => {
+    if (filtroPilar !== "todos" && pilarKey(t.epica) !== filtroPilar) return false;
+    if (!verNoAun && t.caracterVisibilidad === "No aún") return false;
+    return true;
+  });
+
+  function itemsDe(col: string) {
+    return tareasFiltradas
+      .filter(t => normEstado(t.estado) === col)
+      .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || +new Date(a.createdAt) - +new Date(b.createdAt));
+  }
+
+  async function onDrop(col: string, index: number) {
+    if (!drag) return;
+    const dest = itemsDe(col).filter(t => t.id !== drag);
+    const dragged = tareas.find(t => t.id === drag);
+    if (!dragged) return;
+    dest.splice(index, 0, dragged);
+    const ids = dest.map(t => t.id);
+
+    setTareas(prev => prev.map(t => {
+      const idx = ids.indexOf(t.id);
+      if (idx === -1) return t;
+      return { ...t, estado: col, orden: idx };
+    }));
+
+    setDrag(null); setDragOver(null);
+
+    await fetch("/api/tareas/reorder", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ estado: col, ids }),
+    });
+    cargar();
+  }
+
+  async function crearRapida(col: string) {
+    const nombre = (quickAdd[col] || "").trim();
+    if (!nombre) return;
+    const epica = filtroPilar === "todos" ? "" : PILARES.find(p => p.key === filtroPilar)?.nombre || "";
+    await fetch("/api/tareas", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nombre, estado: col, epica, tipo: "Tarea", caracterVisibilidad: "Relevante" }),
+    });
+    setQuickAdd(prev => ({ ...prev, [col]: "" }));
+    cargar();
+  }
+
+  async function crearCompleta() {
+    if (!nueva.nombre.trim()) return;
+    const data: any = { ...nueva };
+    if (!data.fechaVencimiento) delete data.fechaVencimiento;
+    else data.fechaVencimiento = new Date(data.fechaVencimiento).toISOString();
+    if (data.duracionMin) data.duracionMin = Number(data.duracionMin); else delete data.duracionMin;
+    await fetch("/api/tareas", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    setNueva({ nombre: "", epica: "Profesional", tipo: "Tarea", estado: "Sin empezar", prioridad: "Media", caracterVisibilidad: "Relevante", fechaVencimiento: "", duracionMin: "", notas: "" });
+    setShowFull(false);
+    cargar();
+  }
+
+  async function borrarTarea(id: string) {
+    if (!confirm("¿Borrar tarea?")) return;
+    await fetch(`/api/tareas/${id}`, { method: "DELETE" });
+    cargar();
+  }
+
+  async function setCaracter(id: string, caracter: string) {
+    await fetch(`/api/tareas/${id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ caracterVisibilidad: caracter }),
+    });
+    cargar();
+  }
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Kanban</h1>
+      <p style={{ color: "var(--tx3)", marginBottom: 12, fontSize: 12 }}>
+        Arrastrá entre columnas o reordená dentro. Click en ★/☆ cambia carácter de visibilidad.
+      </p>
+
+      {/* Filtros */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <button className={filtroPilar === "todos" ? "primary" : ""} onClick={() => setFiltroPilar("todos")}>Todos</button>
+        {PILARES.map(p => (
+          <button key={p.key}
+            className={filtroPilar === p.key ? "primary" : ""}
+            onClick={() => setFiltroPilar(p.key)}
+            style={{ borderLeft: `3px solid var(--${p.key})` }}>
+            {p.emoji} {p.nombre}
+          </button>
+        ))}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" checked={verNoAun} onChange={e => setVerNoAun(e.target.checked)} />
+            Mostrar "No aún"
+          </label>
+          <button className="primary" onClick={() => setShowFull(!showFull)}>+ Tarea detallada</button>
+        </div>
+      </div>
+
+      {showFull && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Nueva tarea</div>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10 }}>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Nombre</div>
+              <input type="text" value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} /></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Pilar (épica)</div>
+              <select value={nueva.epica} onChange={e => setNueva({ ...nueva, epica: e.target.value })}>
+                {PILARES.map(p => <option key={p.key}>{p.nombre}</option>)}
+              </select></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Tipo</div>
+              <select value={nueva.tipo} onChange={e => setNueva({ ...nueva, tipo: e.target.value })}>
+                <option>Tarea</option><option>Hábito</option><option>Vencimiento</option><option>Proyecto</option>
+              </select></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Estado</div>
+              <select value={nueva.estado} onChange={e => setNueva({ ...nueva, estado: e.target.value })}>
+                {COLUMNAS.map(c => <option key={c}>{c}</option>)}
+              </select></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Prioridad</div>
+              <select value={nueva.prioridad} onChange={e => setNueva({ ...nueva, prioridad: e.target.value })}>
+                <option>Crítica</option><option>Alta</option><option>Media</option><option>Baja</option>
+              </select></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Visibilidad</div>
+              <select value={nueva.caracterVisibilidad} onChange={e => setNueva({ ...nueva, caracterVisibilidad: e.target.value })}>
+                <option>Relevante</option><option>No aún</option>
+              </select></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Fecha vencimiento</div>
+              <input type="date" value={nueva.fechaVencimiento} onChange={e => setNueva({ ...nueva, fechaVencimiento: e.target.value })} /></div>
+            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Duración (min)</div>
+              <input type="number" value={nueva.duracionMin} onChange={e => setNueva({ ...nueva, duracionMin: e.target.value })} /></div>
+            <div style={{ gridColumn: "span 4" }}><div style={{ fontSize: 10, color: "var(--tx3)" }}>Notas</div>
+              <input type="text" value={nueva.notas} onChange={e => setNueva({ ...nueva, notas: e.target.value })} /></div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button className="primary" onClick={crearCompleta}>Crear</button>
+            <button onClick={() => setShowFull(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="kanban-board" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, alignItems: "start" }}>
+        {COLUMNAS.map(col => {
+          const items = itemsDe(col);
+          return (
+            <div key={col}
+              onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
+              onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
+              style={{ background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
+                <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
+              </div>
+
+              {items.map((t, i) => {
+                const k = pilarKey(t.epica);
+                const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
+                const v = venceInfo(t.fechaVencimiento);
+                const noAun = t.caracterVisibilidad === "No aún";
+                return (
+                  <div key={t.id}>
+                    {showBar && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2, marginBottom: 6 }} />}
+                    <div
+                      draggable
+                      onDragStart={() => setDrag(t.id)}
+                      onDragEnd={() => { setDrag(null); setDragOver(null); }}
+                      onDragOver={e => {
+                        e.preventDefault(); e.stopPropagation();
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const before = e.clientY < rect.top + rect.height / 2;
+                        setDragOver({ col, index: before ? i : i + 1 });
+                      }}
+                      onDrop={e => { e.stopPropagation(); onDrop(col, dragOver?.col === col ? dragOver.index : i); }}
+                      style={{
+                        background: "var(--bg3)",
+                        border: "1px solid var(--bd)",
+                        borderLeft: `3px solid var(--${k})`,
+                        borderRadius: 6,
+                        padding: 8,
+                        marginBottom: 6,
+                        cursor: "grab",
+                        opacity: drag === t.id ? 0.4 : (noAun ? 0.6 : 1),
+                      }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
+                        <button
+                          onClick={() => setCaracter(t.id, noAun ? "Relevante" : "No aún")}
+                          title={noAun ? "Marcar relevante" : "Marcar no aún"}
+                          style={{ padding: "0 4px", fontSize: 14, background: "transparent", border: "none", color: noAun ? "var(--tx3)" : "var(--acc)" }}>
+                          {noAun ? "☆" : "★"}
+                        </button>
+                        <div style={{ fontSize: 12, flex: 1, cursor: "pointer" }} onClick={() => setEditId(t.id)}>{t.nombre}</div>
+                        <button onClick={() => borrarTarea(t.id)} title="Borrar"
+                          style={{ padding: "0 4px", fontSize: 12, background: "transparent", border: "none", color: "var(--tx3)" }}>×</button>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        {t.epica && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)` }}>{t.epica}</span>}
+                        <span className="tag" style={{ background: v.bg, color: `var(--${v.color})` }}>{v.txt}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {dragOver?.col === col && dragOver.index === items.length && drag && (
+                <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />
+              )}
+
+              {/* Quick add */}
+              <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
+                <input
+                  type="text"
+                  value={quickAdd[col] || ""}
+                  onChange={e => setQuickAdd(prev => ({ ...prev, [col]: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && crearRapida(col)}
+                  placeholder="+ Tarea rápida..."
+                  style={{ fontSize: 11, padding: "4px 8px" }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editId && <EditTareaModal tareaId={editId} onClose={() => setEditId(null)} onSaved={cargar} />}
+    </div>
+  );
+}

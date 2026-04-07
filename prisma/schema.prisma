@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tarea {
+  id               String    @id @default(cuid())
+  nombre           String
+  estado           String    @default("Sin empezar")
+  epica            String?
+  subepica         String?
+  tipo             String?
+  frecuencia       String?
+  prioridad        String?
+  fechaInicio      DateTime?
+  fechaFin         DateTime?
+  fechaVencimiento DateTime?
+  duracionMin      Int?
+  diasPreferidos   String?
+  horario          String?
+  alerta           Boolean   @default(false)
+  diasAnticipacion Int?
+  racha            Int       @default(0)
+  orden            Int       @default(0)
+  caracterVisibilidad String @default("Relevante")
+  mostrarEnHabitos Boolean @default(true)
+  habitoLogs       HabitoLog[]
+  energia          String?
+  notas            String?
+  proyectoId       String?
+  proyecto         Proyecto? @relation(fields: [proyectoId], references: [id])
+  googleEventId    String?
+  googleCalendarId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Proyecto {
+  id           String    @id @default(cuid())
+  nombre       String
+  estado       String    @default("Sin empezar")
+  epica        String?
+  tipoProyecto String?
+  avance       Float     @default(0)
+  fechaInicio  DateTime?
+  fechaLimite  DateTime?
+  plataforma   String?
+  notas        String?
+  tareas       Tarea[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model HabitoLog {
+  id        String   @id @default(cuid())
+  tareaId   String
+  tarea     Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  fecha     String   // YYYY-MM-DD
+  createdAt DateTime @default(now())
+  @@unique([tareaId, fecha])
+}
+
+model CronogramaBase {
+  id            String @id @default(cuid())
+  dia           String
+  bloque        String
+  actividad     String
+  pilar         String
+  horarioInicio String
+  horarioFin    String
+}
+
+model Nota {
+  id         String   @id @default(cuid())
+  texto      String
+  pantalla   String
+  convertida Boolean  @default(false)
+  tareaId    String?
+  createdAt  DateTime @default(now())
+}
+
+model Settings {
+  id                      String  @id @default("user")
+  horaBriefing            String  @default("07:30")
+  horaReview              String  @default("22:00")
+  frecuenciaSync          Int     @default(6)
+  briefingActivo          Boolean @default(true)
+  alertasVencimiento      Boolean @default(true)
+  pushCalendar            Boolean @default(true)
+  resumenSemanal          Boolean @default(true)
+  alertaSobrecarga        Boolean @default(false)
+  googleCalendarConectado Boolean @default(false)
+  telegramConectado       Boolean @default(false)
+  telegramChatId          String?
+  googleAccessToken       String?
+  googleRefreshToken      String?
+  googleTokenExpiry       DateTime?
+  googleCalendarsJson     String? // JSON: { mus: "calId", fit: "calId", ... }
+  googleEmail             String?
+}
