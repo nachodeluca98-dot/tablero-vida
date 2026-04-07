@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import PushToggle from "@/components/PushToggle";
 
 export default function Settings() {
   const [s, setS] = useState<any>(null);
@@ -84,6 +85,11 @@ export default function Settings() {
                 (e.target as HTMLButtonElement).disabled = false;
               }} style={{ color: "var(--amb-t)" }}>Limpiar duplicados</button>
               <button onClick={async () => {
+                const r = await fetch("/api/google/watch", { method: "POST" });
+                const d = await r.json();
+                alert(d.ok ? `Watch activado ✓ (expira ${new Date(+d.expiration).toLocaleString()})` : `Error: ${d.error}`);
+              }}>Activar watch (sync en tiempo real)</button>
+              <button onClick={async () => {
                 if (!confirm("¿Desconectar Google?")) return;
                 await fetch("/api/google/disconnect", { method: "POST" });
                 const r = await fetch("/api/settings"); setS(await r.json());
@@ -95,6 +101,11 @@ export default function Settings() {
             <button className="primary">Conectar Google Calendar</button>
           </a>
         )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">🔔 Notificaciones push (este dispositivo)</div>
+        <PushToggle />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>

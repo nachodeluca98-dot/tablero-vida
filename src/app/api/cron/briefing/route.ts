@@ -4,7 +4,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendTelegram, escapeHtml } from "@/lib/telegram";
+import { sendPushToAll } from "@/lib/push";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
+import { renewWatchIfNeeded } from "@/lib/googleWatch";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +90,20 @@ export async function GET(req: NextRequest) {
 
   lines.push("", "💪 ¡A romperla!");
 
-  const result = await sendTelegram(lines.join("\n"));
-  return NextResponse.json({ ok: true, sent: result });
+  const tg = await sendTelegram(lines.join("\n"));
+
+  const push = await sendPushToAll({
+    title: `☀️ Buen día — ${dia} ${fmtDate(t)}`,
+    body: tareasHoy.length
+      ? `${tareasHoy.length} tareas hoy${vencen.length ? ` · ${vencen.length} vencimientos próximos` : ""}`
+      : "Sin tareas agendadas hoy 🌿",
+    url: "/",
+    tag: "briefing",
+  });
+
+  // Renovar watch de Google si está por expirar
+  let watch: any = null;
+  try { watch = await renewWatchIfNeeded(); } catch (e) { watch = { error: String(e) }; }
+
+  return NextResponse.json({ ok: true, telegram: tg, push, watch });
 }

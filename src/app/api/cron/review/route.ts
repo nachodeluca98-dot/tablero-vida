@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendTelegram, escapeHtml } from "@/lib/telegram";
+import { sendPushToAll } from "@/lib/push";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,12 @@ export async function GET(req: NextRequest) {
     lines.push("🔥 <b>¡Día perfecto! Todos los hábitos marcados.</b>");
   }
 
-  const result = await sendTelegram(lines.join("\n"));
-  return NextResponse.json({ ok: true, sent: result });
+  const tg = await sendTelegram(lines.join("\n"));
+  const push = await sendPushToAll({
+    title: "🌙 Review del día",
+    body: `${hechos.length}/${habitos.length} hábitos marcados${faltan.length ? ` · ${faltan.length} pendientes` : " · ¡día perfecto!"}`,
+    url: "/habitos",
+    tag: "review",
+  });
+  return NextResponse.json({ ok: true, telegram: tg, push });
 }

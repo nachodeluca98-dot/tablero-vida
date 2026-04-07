@@ -101,4 +101,17 @@ model Settings {
   googleTokenExpiry       DateTime?
   googleCalendarsJson     String? // JSON: { mus: "calId", fit: "calId", ... }
   googleEmail             String?
+  googleSyncToken         String?
+  googleWatchChannelId    String?
+  googleWatchResourceId   String?
+  googleWatchExpiration   DateTime?
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
 }
