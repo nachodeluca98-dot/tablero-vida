@@ -7,17 +7,33 @@ export default function Dashboard() {
   const [notas, setNotas] = useState<any[]>([]);
   const [cronograma, setCronograma] = useState<any[]>([]);
   const [nuevaNota, setNuevaNota] = useState("");
+  const [insights, setInsights] = useState<any>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachMsg, setCoachMsg] = useState("");
 
   const DIAS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
   const hoy = DIAS[new Date().getDay()];
 
   async function cargar() {
-    const [t, n, c] = await Promise.all([
+    const [t, n, c, i] = await Promise.all([
       fetch("/api/tareas").then(r => r.json()),
       fetch("/api/notas?pantalla=dashboard").then(r => r.json()),
       fetch("/api/cronograma").then(r => r.json()),
+      fetch("/api/insights").then(r => r.json()),
     ]);
-    setTareas(t); setNotas(n); setCronograma(c);
+    setTareas(t); setNotas(n); setCronograma(c); setInsights(i);
+  }
+
+  async function pedirCoach() {
+    setCoachLoading(true); setCoachMsg("");
+    try {
+      const r = await fetch("/api/coach", { method: "POST" });
+      const d = await r.json();
+      setCoachMsg(d.respuesta || d.error || "Sin respuesta");
+    } catch (e: any) {
+      setCoachMsg("Error: " + e.message);
+    }
+    setCoachLoading(false);
   }
   useEffect(() => { cargar(); }, []);
 
@@ -52,6 +68,38 @@ export default function Dashboard() {
     <div>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Dashboard</h1>
       <p style={{ color: "var(--tx3)", marginBottom: 20 }}>Hoy es {hoy} — {new Date().toLocaleDateString("es-AR")}</p>
+
+      {insights && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "var(--acc)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div className="card-title" style={{ margin: 0 }}>🧭 Señales de hoy</div>
+            <button onClick={pedirCoach} disabled={coachLoading} className="primary" style={{ fontSize: 11, padding: "4px 10px" }}>
+              {coachLoading ? "..." : "🤖 ¿Qué hago ahora?"}
+            </button>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {insights.senales.map((s: any, i: number) => {
+              const color = s.nivel === "alert" ? "var(--red-t)" : s.nivel === "warn" ? "var(--amb-t)" : "var(--tx2)";
+              const bg = s.nivel === "alert" ? "var(--red-b)" : s.nivel === "warn" ? "var(--amb-b)" : "var(--bg3)";
+              return (
+                <div key={i} style={{ background: bg, border: `1px solid ${color}33`, borderRadius: 8, padding: 10, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <div style={{ fontSize: 20 }}>{s.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, color }}>{s.titulo}</div>
+                    <div style={{ fontSize: 12, color: "var(--tx2)" }}>{s.texto}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {coachMsg && (
+            <div style={{ marginTop: 12, padding: 12, background: "var(--bg3)", borderRadius: 8, border: "1px solid var(--acc)", whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 11, color: "var(--acc)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>🤖 Coach</div>
+              {coachMsg}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
         {[

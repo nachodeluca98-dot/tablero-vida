@@ -3,8 +3,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendTelegram, escapeHtml } from "@/lib/telegram";
+import { sendTelegram, sendTelegramWithButtons, answerCallback, editTelegramMessage, escapeHtml } from "@/lib/telegram";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
+import { askCoach } from "@/lib/coach";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,28 @@ function fmtDate(d: Date) {
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+async function buildHabitsKeyboard() {
+  const habitos = await prisma.tarea.findMany({
+    where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
+    include: { habitoLogs: { where: { fecha: today() } } },
+    take: 30,
+  });
+  const lines: string[] = ["<b>🔁 Hábitos de hoy</b>", "Tappeá para marcar/desmarcar:", ""];
+  const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
+  for (const h of habitos) {
+    const hecho = h.habitoLogs.length > 0;
+    const p = pilarFromKey(pilarKey(h.epica));
+    const label = `${hecho ? "✅" : "⬜"} ${p.emoji} ${h.nombre} 🔥${h.racha}`;
+    buttons.push([{ text: label.slice(0, 60), callback_data: `h:${h.id}` }]);
+  }
+  return { text: lines.join("\n"), buttons };
+}
+
+async function sendHabitsKeyboard(chatId: string) {
+  const { text, buttons } = await buildHabitsKeyboard();
+  await sendTelegramWithButtons(text, buttons, chatId);
 }
 
 async function handleCommand(text: string, chatId: string) {
@@ -31,9 +54,10 @@ async function handleCommand(text: string, chatId: string) {
         "• /hoy — tareas y bloques de hoy",
         "• /nueva &lt;texto&gt; — crear tarea rápida",
         "• /hecho &lt;hábito&gt; — marcar hábito del día",
-        "• /habitos — lista de hábitos + rachas",
+        "• /habitos — lista con botones tappeables",
         "• /vencimientos — próximos vencimientos",
         "• /briefing — resumen matinal",
+        "• /coach — recomendación personalizada (IA)",
         "• /ayuda — este mensaje",
         "",
         `Tu chat ID: <code>${chatId}</code>`,
@@ -131,19 +155,18 @@ async function handleCommand(text: string, chatId: string) {
   }
 
   if (cmd === "/habitos") {
-    const habitos = await prisma.tarea.findMany({
-      where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
-      include: { habitoLogs: true },
-      take: 30,
-    });
-    const fecha = today();
-    const lines: string[] = ["<b>🔁 Hábitos</b>", ""];
-    for (const h of habitos) {
-      const hecho = h.habitoLogs.some(l => l.fecha === fecha);
-      const p = pilarFromKey(pilarKey(h.epica));
-      lines.push(`${hecho ? "✅" : "⬜"} ${p.emoji} ${escapeHtml(h.nombre)} · 🔥${h.racha}`);
+    await sendHabitsKeyboard(chatId);
+    return;
+  }
+
+  if (cmd === "/coach") {
+    await sendTelegram("🤖 Pensando...", chatId);
+    try {
+      const r = await askCoach();
+      await sendTelegram(`🤖 <b>Coach</b>\n\n${escapeHtml(r.respuesta || r.error || "Sin respuesta")}`, chatId);
+    } catch (e: any) {
+      await sendTelegram(`Error del coach: ${e.message}`, chatId);
     }
-    await sendTelegram(lines.join("\n"), chatId);
     return;
   }
 
@@ -185,6 +208,38 @@ async function handleCommand(text: string, chatId: string) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Callback queries (botones tappeados)
+    if (body.callback_query) {
+      const cq = body.callback_query;
+      const chatId = String(cq.message.chat.id);
+      const allowed = process.env.TELEGRAM_CHAT_ID;
+      if (allowed && chatId !== allowed) {
+        await answerCallback(cq.id, "🚫 No autorizado");
+        return NextResponse.json({ ok: true });
+      }
+      const data: string = cq.data || "";
+      if (data.startsWith("h:")) {
+        const tareaId = data.slice(2);
+        const fecha = today();
+        const existing = await prisma.habitoLog.findUnique({
+          where: { tareaId_fecha: { tareaId, fecha } },
+        });
+        if (existing) {
+          await prisma.habitoLog.delete({ where: { id: existing.id } });
+        } else {
+          await prisma.habitoLog.create({ data: { tareaId, fecha } });
+        }
+        // Refrescar el teclado
+        const { text, buttons } = await buildHabitsKeyboard();
+        await editTelegramMessage(chatId, cq.message.message_id, text, buttons);
+        await answerCallback(cq.id, existing ? "Desmarcado" : "✓ Marcado");
+      } else {
+        await answerCallback(cq.id);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const msg = body.message || body.edited_message;
     if (!msg || !msg.text) return NextResponse.json({ ok: true });
 

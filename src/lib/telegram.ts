@@ -39,3 +39,55 @@ export async function sendTelegram(text: string, chatId?: string) {
 export function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+// Manda un mensaje con teclado inline (botones tappeables)
+export async function sendTelegramWithButtons(
+  text: string,
+  buttons: Array<Array<{ text: string; callback_data: string }>>,
+  chatId?: string
+) {
+  if (!TOKEN) return { ok: false };
+  const id = chatId || DEFAULT_CHAT_ID;
+  const res = await fetch(`${API}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: id,
+      text,
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: buttons },
+    }),
+  });
+  return res.json();
+}
+
+// Responde un callback (cuando el usuario tappea un botón)
+export async function answerCallback(callbackQueryId: string, text?: string) {
+  if (!TOKEN) return;
+  await fetch(`${API}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+  });
+}
+
+// Edita un mensaje existente (para refrescar la lista de hábitos tras tappear)
+export async function editTelegramMessage(
+  chatId: string,
+  messageId: number,
+  text: string,
+  buttons?: Array<Array<{ text: string; callback_data: string }>>
+) {
+  if (!TOKEN) return;
+  await fetch(`${API}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      reply_markup: buttons ? { inline_keyboard: buttons } : undefined,
+    }),
+  });
+}
