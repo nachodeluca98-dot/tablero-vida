@@ -5,11 +5,22 @@ import Sidebar from "@/components/Sidebar";
 export const metadata: Metadata = {
   title: "Tablero de Vida",
   description: "Gestión personal de vida",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Tablero",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#f59e0b",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
