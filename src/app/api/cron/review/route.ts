@@ -1,11 +1,11 @@
-// Cron nocturno: review del día.
-// Muestra hábitos del día (qué marcaste y qué falta) + tareas pendientes.
+// Cron nocturno: inicia la reflexión diaria conversacional vía Telegram.
+// Crea/resetea ReflexionDiaria de hoy con paso=1 y envía la primera pregunta.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendTelegram, escapeHtml } from "@/lib/telegram";
+import { sendTelegram } from "@/lib/telegram";
 import { sendPushToAll } from "@/lib/push";
-import { pilarFromKey, pilarKey } from "@/lib/pilares";
+import { PREGUNTAS } from "@/lib/reflexion";
 
 export const dynamic = "force-dynamic";
 
@@ -21,36 +21,17 @@ export async function GET(req: NextRequest) {
   }
 
   const fecha = today();
-  const habitos = await prisma.tarea.findMany({
-    where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
-    include: { habitoLogs: { where: { fecha } } },
+  await prisma.reflexionDiaria.upsert({
+    where: { fecha },
+    update: { paso: 1, animo: null, mejor: null, frustracion: null, mejorar: null, gratitud: null },
+    create: { fecha, paso: 1 },
   });
 
-  const hechos = habitos.filter(h => h.habitoLogs.length > 0);
-  const faltan = habitos.filter(h => h.habitoLogs.length === 0);
-
-  const lines: string[] = [
-    "🌙 <b>Review del día</b>",
-    "",
-    `✅ Hábitos marcados: <b>${hechos.length}/${habitos.length}</b>`,
-    "",
-  ];
-
-  if (faltan.length) {
-    lines.push("<b>⬜ Pendientes de marcar:</b>");
-    for (const h of faltan.slice(0, 15)) {
-      const p = pilarFromKey(pilarKey(h.epica));
-      lines.push(`${p.emoji} ${escapeHtml(h.nombre)}`);
-    }
-    lines.push("", "Marcalos con <code>/hecho &lt;nombre&gt;</code>");
-  } else {
-    lines.push("🔥 <b>¡Día perfecto! Todos los hábitos marcados.</b>");
-  }
-
-  const tg = await sendTelegram(lines.join("\n"));
+  const texto = `🌙 <b>Review del día</b>\n\n<b>1/5</b> — ${PREGUNTAS[0]}\n\n<i>Respondé este mensaje para continuar.</i>`;
+  const tg = await sendTelegram(texto);
   const push = await sendPushToAll({
     title: "🌙 Review del día",
-    body: `${hechos.length}/${habitos.length} hábitos marcados${faltan.length ? ` · ${faltan.length} pendientes` : " · ¡día perfecto!"}`,
+    body: "Respondé la reflexión diaria en Telegram",
     url: "/habitos",
     tag: "review",
   });

@@ -6,6 +6,47 @@ import { prisma } from "@/lib/prisma";
 import { sendTelegram, sendTelegramWithButtons, answerCallback, editTelegramMessage, escapeHtml } from "@/lib/telegram";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { askCoach } from "@/lib/coach";
+import { PREGUNTAS } from "@/lib/reflexion";
+
+async function handleReflexion(text: string, chatId: string): Promise<boolean> {
+  const fecha = today();
+  const r = await prisma.reflexionDiaria.findUnique({ where: { fecha } });
+  if (!r || r.paso < 1 || r.paso > 5) return false;
+
+  // guardar respuesta según paso actual
+  const data: any = {};
+  if (r.paso === 1) {
+    const n = parseInt(text.match(/\d+/)?.[0] || "");
+    data.animo = isNaN(n) ? null : Math.max(1, Math.min(10, n));
+  } else if (r.paso === 2) data.mejor = text;
+  else if (r.paso === 3) data.frustracion = text;
+  else if (r.paso === 4) data.mejorar = text;
+  else if (r.paso === 5) data.gratitud = text;
+
+  const siguientePaso = r.paso + 1;
+  data.paso = siguientePaso;
+  await prisma.reflexionDiaria.update({ where: { fecha }, data });
+
+  if (siguientePaso <= 5) {
+    await sendTelegram(`<b>${siguientePaso}/5</b> — ${PREGUNTAS[siguientePaso - 1]}`, chatId);
+  } else {
+    // resumen final
+    const f = await prisma.reflexionDiaria.findUnique({ where: { fecha } });
+    const lines = [
+      "✅ <b>Reflexión guardada</b>",
+      "",
+      `😌 Ánimo: <b>${f?.animo ?? "—"}/10</b>`,
+      `🌟 Mejor: ${escapeHtml(f?.mejor || "—")}`,
+      `😤 Frustración: ${escapeHtml(f?.frustracion || "—")}`,
+      `🔁 Mejorar mañana: ${escapeHtml(f?.mejorar || "—")}`,
+      `🙏 Gratitud: ${escapeHtml(f?.gratitud || "—")}`,
+      "",
+      "Descansá bien. 🌙",
+    ];
+    await sendTelegram(lines.join("\n"), chatId);
+  }
+  return true;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -256,7 +297,11 @@ export async function POST(req: NextRequest) {
     if (text.startsWith("/")) {
       await handleCommand(text, chatId);
     } else {
-      await sendTelegram("Mandá /ayuda para ver los comandos disponibles.", chatId);
+      // Primero intentamos procesar como respuesta a la reflexión diaria
+      const handled = await handleReflexion(text, chatId);
+      if (!handled) {
+        await sendTelegram("Mandá /ayuda para ver los comandos disponibles.", chatId);
+      }
     }
 
     return NextResponse.json({ ok: true });

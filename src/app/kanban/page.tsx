@@ -8,16 +8,46 @@ export default function KanbanPage() {
   return <Suspense fallback={<div>Cargando...</div>}><Kanban /></Suspense>;
 }
 
-const COLUMNAS = ["Sin empezar", "Agendada", "En progreso", "Completada", "Más tarde"];
+const COLUMNAS_DEFAULT = ["Sin empezar", "Agendada", "En progreso", "Completada", "Más tarde"];
+const COLUMNAS_CRE = ["Borrador", "Pend. enviar", "En edición", "Pend. revisar", "En corrección", "Listo", "Subido"];
+const COLUMNAS_SOC = ["Agendada", "Recurrente", "Later", "Completada"];
 
-function normEstado(e?: string) {
-  if (!e) return "Sin empezar";
+function columnasDe(pilar: PilarKey | "todos"): string[] {
+  if (pilar === "cre") return COLUMNAS_CRE;
+  if (pilar === "soc") return COLUMNAS_SOC;
+  return COLUMNAS_DEFAULT;
+}
+
+function normEstadoEn(e: string | undefined, cols: string[]) {
+  if (!e) return cols[0];
+  // match exacto case-insensitive
+  const m = cols.find(c => c.toLowerCase() === e.toLowerCase());
+  if (m) return m;
   const l = e.toLowerCase();
-  if (l.includes("agend")) return "Agendada";
-  if (l.includes("progreso")) return "En progreso";
-  if (l.includes("complet") || l.includes("hecho")) return "Completada";
-  if (l.includes("tarde") || l.includes("backlog") || l.includes("later")) return "Más tarde";
-  return "Sin empezar";
+  // fallbacks default
+  if (cols === COLUMNAS_DEFAULT) {
+    if (l.includes("agend")) return "Agendada";
+    if (l.includes("progreso")) return "En progreso";
+    if (l.includes("complet") || l.includes("hecho")) return "Completada";
+    if (l.includes("tarde") || l.includes("backlog") || l.includes("later")) return "Más tarde";
+    return "Sin empezar";
+  }
+  if (cols === COLUMNAS_SOC) {
+    if (l.includes("agend")) return "Agendada";
+    if (l.includes("recurr")) return "Recurrente";
+    if (l.includes("later") || l.includes("tarde")) return "Later";
+    if (l.includes("complet")) return "Completada";
+    return "Agendada";
+  }
+  // CRE
+  if (l.includes("borrad")) return "Borrador";
+  if (l.includes("envi")) return "Pend. enviar";
+  if (l.includes("edici")) return "En edición";
+  if (l.includes("revis")) return "Pend. revisar";
+  if (l.includes("correc")) return "En corrección";
+  if (l.includes("listo")) return "Listo";
+  if (l.includes("subid")) return "Subido";
+  return cols[0];
 }
 
 function esRecurrente(t: any) {
@@ -46,6 +76,7 @@ function Kanban() {
   const [dragOver, setDragOver] = useState<{ col: string; index: number } | null>(null);
   const [filtroPilar, setFiltroPilar] = useState<PilarKey | "todos">("todos");
   const [filtroRec, setFiltroRec] = useState<"todos" | "puntual" | "recurrente">("todos");
+  const [filtroSub, setFiltroSub] = useState<string | "todos">("todos");
   const [verNoAun, setVerNoAun] = useState(false);
   const [quickAdd, setQuickAdd] = useState<Record<string, string>>({});
   const [editId, setEditId] = useState<string | null>(null);
@@ -68,17 +99,20 @@ function Kanban() {
   }
   useEffect(() => { cargar(); }, []);
 
+  const COLUMNAS = columnasDe(filtroPilar);
+
   const tareasFiltradas = tareas.filter(t => {
     if (filtroPilar !== "todos" && pilarKey(t.epica) !== filtroPilar) return false;
     if (!verNoAun && t.caracterVisibilidad === "No aún") return false;
     if (filtroRec === "puntual" && esRecurrente(t)) return false;
     if (filtroRec === "recurrente" && !esRecurrente(t)) return false;
+    if (filtroPilar === "ges" && filtroSub !== "todos" && (t.subepica || "") !== filtroSub) return false;
     return true;
   });
 
   function itemsDe(col: string) {
     return tareasFiltradas
-      .filter(t => normEstado(t.estado) === col)
+      .filter(t => normEstadoEn(t.estado, COLUMNAS) === col)
       .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || +new Date(a.createdAt) - +new Date(b.createdAt));
   }
 
@@ -174,6 +208,15 @@ function Kanban() {
         ))}
       </div>
 
+      {/* Subfiltro Capitalist (solo Gestión Adulta) */}
+      {filtroPilar === "ges" && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--tx3)" }}>Sub-épica:</span>
+          <button className={filtroSub === "todos" ? "primary" : ""} onClick={() => setFiltroSub("todos")} style={{ fontSize: 11, padding: "3px 10px" }}>Todas</button>
+          <button className={filtroSub === "Capitalist" ? "primary" : ""} onClick={() => setFiltroSub("Capitalist")} style={{ fontSize: 11, padding: "3px 10px" }}>💰 Capitalist</button>
+        </div>
+      )}
+
       {/* Filtros de recurrencia + zoom + toggles */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ display: "flex", gap: 4, background: "var(--bg2)", padding: 3, borderRadius: 6, border: "1px solid var(--bd)" }}>
@@ -250,19 +293,12 @@ function Kanban() {
         <div className="kanban-board">
           {COLUMNAS.map(col => {
             const items = itemsDe(col);
-            return (
-              <div key={col} className="kanban-col"
-                onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
-                onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
-                style={{ width: colWidth, minWidth: colWidth, background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
-                  <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
-                </div>
-
-                {items.map((t, i) => {
+            const puntuales = items.filter(t => !esRecurrente(t));
+            const recurrentes = items.filter(t => esRecurrente(t));
+            const renderCard = (t: any, i: number) => {
                   const k = pilarKey(t.epica);
                   const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
+                  // (card render)
                   const v = venceInfo(t.fechaVencimiento);
                   const noAun = t.caracterVisibilidad === "No aún";
                   const rec = esRecurrente(t);
@@ -311,7 +347,24 @@ function Kanban() {
                       </div>
                     </div>
                   );
-                })}
+            };
+            return (
+              <div key={col} className="kanban-col"
+                onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
+                onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
+                style={{ width: colWidth, minWidth: colWidth, background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
+                  <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
+                </div>
+
+                {/* Subseccion: Puntuales arriba */}
+                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--pro-t)", padding: "2px 4px", marginBottom: 4, fontWeight: 700 }}>⚡ Puntuales ({puntuales.length})</div>
+                {puntuales.map((t, i) => renderCard(t, i))}
+
+                {/* Subseccion: Recurrentes abajo */}
+                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--apr-t)", padding: "8px 4px 2px", marginTop: 6, borderTop: "1px dashed var(--bd)", fontWeight: 700 }}>🔁 Recurrentes ({recurrentes.length})</div>
+                {recurrentes.map((t, i) => renderCard(t, puntuales.length + i))}
 
                 {dragOver?.col === col && dragOver.index === items.length && drag && (
                   <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />

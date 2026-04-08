@@ -108,6 +108,19 @@ model Settings {
   googleWatchExpiration   DateTime?
 }
 
+model ReflexionDiaria {
+  id          String   @id @default(cuid())
+  fecha       String   @unique // YYYY-MM-DD
+  paso        Int      @default(0) // 0=no iniciada, 1..5=esperando respuesta a esa pregunta, 6=completa
+  animo       Int?
+  mejor       String?
+  frustracion String?
+  mejorar     String?
+  gratitud    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model PushSubscription {
   id        String   @id @default(cuid())
   endpoint  String   @unique

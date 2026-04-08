@@ -96,16 +96,53 @@ export default function EditTareaModal({
               <option>Relevante</option><option>No aún</option>
             </select></div>
 
-          <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Frecuencia</div>
-            <input type="text" value={t.frecuencia || ""} onChange={e => set("frecuencia", e.target.value)} /></div>
-          <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Días preferidos</div>
-            <input type="text" value={t.diasPreferidos || ""} onChange={e => set("diasPreferidos", e.target.value)} /></div>
-          <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Horario</div>
-            <input type="text" value={t.horario || ""} onChange={e => set("horario", e.target.value)} /></div>
+          <div style={{ gridColumn: "span 3", padding: 10, background: "var(--bg3)", borderRadius: 6, border: "1px solid var(--bd)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: "var(--tx2)" }}>¿Cuándo?</div>
+            <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+                <input type="radio" name="recurrencia" checked={!t.frecuencia || ["", "Puntual", "Una vez", "Única"].includes(t.frecuencia)}
+                  onChange={() => set("frecuencia", "Puntual")} />
+                ⚡ Puntual (fecha única)
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+                <input type="radio" name="recurrencia" checked={!!t.frecuencia && !["", "Puntual", "Una vez", "Única"].includes(t.frecuencia)}
+                  onChange={() => set("frecuencia", "Diaria")} />
+                🔁 Recurrente
+              </label>
+            </div>
+
+            {(!t.frecuencia || ["", "Puntual", "Una vez", "Única"].includes(t.frecuencia)) ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Fecha</div>
+                  <input type="date" value={t.fechaVencimiento || ""} onChange={e => set("fechaVencimiento", e.target.value)} /></div>
+                <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Horario</div>
+                  <input type="text" value={t.horario || ""} onChange={e => set("horario", e.target.value)} placeholder="07:00" /></div>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 10 }}>
+                <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Frecuencia</div>
+                  <select value={t.frecuencia} onChange={e => set("frecuencia", e.target.value)}>
+                    <option>Diaria</option>
+                    <option>Semanal</option>
+                    <option>Quincenal</option>
+                    <option>Mensual</option>
+                    <option>Cada N semanas</option>
+                  </select></div>
+                <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>
+                  {t.frecuencia === "Semanal" || t.frecuencia === "Quincenal" ? "Días (L,M,X,J,V,S,D)" :
+                   t.frecuencia === "Cada N semanas" ? "Cada cuántas semanas" :
+                   t.frecuencia === "Mensual" ? "Día del mes" : "Detalle"}
+                </div>
+                  <input type="text" value={t.diasPreferidos || ""} onChange={e => set("diasPreferidos", e.target.value)}
+                    placeholder={t.frecuencia === "Cada N semanas" ? "2" : t.frecuencia === "Mensual" ? "15" : "L,X,V"} /></div>
+                <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Horario</div>
+                  <input type="text" value={t.horario || ""} onChange={e => set("horario", e.target.value)} placeholder="07:00" /></div>
+              </div>
+            )}
+          </div>
 
           {F("Fecha inicio", "fechaInicio", "datetime-local")}
           {F("Fecha fin", "fechaFin", "datetime-local")}
-          {F("Fecha vencimiento", "fechaVencimiento", "date")}
 
           {F("Duración (min)", "duracionMin", "number")}
           <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Energía</div>
