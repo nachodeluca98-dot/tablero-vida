@@ -8,15 +8,24 @@ export default function KanbanPage() {
   return <Suspense fallback={<div>Cargando...</div>}><Kanban /></Suspense>;
 }
 
-const COLUMNAS = ["Sin empezar", "En progreso", "Completada", "Más tarde"];
+const COLUMNAS = ["Sin empezar", "Agendada", "En progreso", "Completada", "Más tarde"];
 
 function normEstado(e?: string) {
   if (!e) return "Sin empezar";
   const l = e.toLowerCase();
+  if (l.includes("agend")) return "Agendada";
   if (l.includes("progreso")) return "En progreso";
   if (l.includes("complet") || l.includes("hecho")) return "Completada";
-  if (l.includes("tarde") || l.includes("backlog")) return "Más tarde";
+  if (l.includes("tarde") || l.includes("backlog") || l.includes("later")) return "Más tarde";
   return "Sin empezar";
+}
+
+function esRecurrente(t: any) {
+  if (t.tipo === "Hábito") return true;
+  if (!t.frecuencia) return false;
+  const f = String(t.frecuencia).toLowerCase();
+  if (f === "" || f === "puntual" || f === "una vez" || f === "única") return false;
+  return true;
 }
 
 function venceInfo(fecha?: string | null) {
@@ -36,10 +45,12 @@ function Kanban() {
   const [drag, setDrag] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<{ col: string; index: number } | null>(null);
   const [filtroPilar, setFiltroPilar] = useState<PilarKey | "todos">("todos");
+  const [filtroRec, setFiltroRec] = useState<"todos" | "puntual" | "recurrente">("todos");
   const [verNoAun, setVerNoAun] = useState(false);
   const [quickAdd, setQuickAdd] = useState<Record<string, string>>({});
   const [editId, setEditId] = useState<string | null>(null);
   const [showFull, setShowFull] = useState(false);
+  const [colWidth, setColWidth] = useState(280); // zoom: px por columna en desktop
   const [nueva, setNueva] = useState<any>({
     nombre: "", epica: "Profesional", tipo: "Tarea", estado: "Sin empezar",
     prioridad: "Media", caracterVisibilidad: "Relevante",
@@ -60,6 +71,8 @@ function Kanban() {
   const tareasFiltradas = tareas.filter(t => {
     if (filtroPilar !== "todos" && pilarKey(t.epica) !== filtroPilar) return false;
     if (!verNoAun && t.caracterVisibilidad === "No aún") return false;
+    if (filtroRec === "puntual" && esRecurrente(t)) return false;
+    if (filtroRec === "recurrente" && !esRecurrente(t)) return false;
     return true;
   });
 
@@ -95,10 +108,18 @@ function Kanban() {
   async function crearRapida(col: string) {
     const nombre = (quickAdd[col] || "").trim();
     if (!nombre) return;
-    const epica = filtroPilar === "todos" ? "" : PILARES.find(p => p.key === filtroPilar)?.nombre || "";
+    // Si hay un filtro de pilar activo, lo usa como épica por defecto
+    const epica = filtroPilar === "todos" ? "Meta-sistema" : PILARES.find(p => p.key === filtroPilar)?.nombre || "";
     await fetch("/api/tareas", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nombre, estado: col, epica, tipo: "Tarea", caracterVisibilidad: "Relevante" }),
+      body: JSON.stringify({
+        nombre,
+        estado: col,
+        epica,
+        tipo: "Tarea",
+        caracterVisibilidad: "Relevante",
+        prioridad: "Media",
+      }),
     });
     setQuickAdd(prev => ({ ...prev, [col]: "" }));
     cargar();
@@ -140,8 +161,8 @@ function Kanban() {
         Arrastrá entre columnas o reordená dentro. Click en ★/☆ cambia carácter de visibilidad.
       </p>
 
-      {/* Filtros */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+      {/* Filtros de pilar */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button className={filtroPilar === "todos" ? "primary" : ""} onClick={() => setFiltroPilar("todos")}>Todos</button>
         {PILARES.map(p => (
           <button key={p.key}
@@ -151,6 +172,31 @@ function Kanban() {
             {p.emoji} {p.nombre}
           </button>
         ))}
+      </div>
+
+      {/* Filtros de recurrencia + zoom + toggles */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 4, background: "var(--bg2)", padding: 3, borderRadius: 6, border: "1px solid var(--bd)" }}>
+          {[
+            { k: "todos", l: "Todas" },
+            { k: "puntual", l: "⚡ Puntuales" },
+            { k: "recurrente", l: "🔁 Recurrentes" },
+          ].map(o => (
+            <button key={o.k}
+              onClick={() => setFiltroRec(o.k as any)}
+              className={filtroRec === o.k ? "primary" : ""}
+              style={{ fontSize: 11, padding: "3px 10px" }}>
+              {o.l}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: "var(--tx3)" }}>
+          Zoom:
+          <button onClick={() => setColWidth(w => Math.max(180, w - 40))} style={{ padding: "3px 8px", fontSize: 12 }}>−</button>
+          <button onClick={() => setColWidth(w => Math.min(500, w + 40))} style={{ padding: "3px 8px", fontSize: 12 }}>+</button>
+        </div>
+
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
             <input type="checkbox" checked={verNoAun} onChange={e => setVerNoAun(e.target.checked)} />
@@ -200,85 +246,91 @@ function Kanban() {
         </div>
       )}
 
-      <div className="kanban-board" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, alignItems: "start" }}>
-        {COLUMNAS.map(col => {
-          const items = itemsDe(col);
-          return (
-            <div key={col}
-              onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
-              onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
-              style={{ background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
-                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
-                <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
-              </div>
+      <div className="kanban-scroll">
+        <div className="kanban-board">
+          {COLUMNAS.map(col => {
+            const items = itemsDe(col);
+            return (
+              <div key={col} className="kanban-col"
+                onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
+                onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
+                style={{ width: colWidth, minWidth: colWidth, background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
+                  <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
+                </div>
 
-              {items.map((t, i) => {
-                const k = pilarKey(t.epica);
-                const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
-                const v = venceInfo(t.fechaVencimiento);
-                const noAun = t.caracterVisibilidad === "No aún";
-                return (
-                  <div key={t.id}>
-                    {showBar && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2, marginBottom: 6 }} />}
-                    <div
-                      draggable
-                      onDragStart={() => setDrag(t.id)}
-                      onDragEnd={() => { setDrag(null); setDragOver(null); }}
-                      onDragOver={e => {
-                        e.preventDefault(); e.stopPropagation();
-                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        const before = e.clientY < rect.top + rect.height / 2;
-                        setDragOver({ col, index: before ? i : i + 1 });
-                      }}
-                      onDrop={e => { e.stopPropagation(); onDrop(col, dragOver?.col === col ? dragOver.index : i); }}
-                      style={{
-                        background: "var(--bg3)",
-                        border: "1px solid var(--bd)",
-                        borderLeft: `3px solid var(--${k})`,
-                        borderRadius: 6,
-                        padding: 8,
-                        marginBottom: 6,
-                        cursor: "grab",
-                        opacity: drag === t.id ? 0.4 : (noAun ? 0.6 : 1),
-                      }}>
-                      <div style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
-                        <button
-                          onClick={() => setCaracter(t.id, noAun ? "Relevante" : "No aún")}
-                          title={noAun ? "Marcar relevante" : "Marcar no aún"}
-                          style={{ padding: "0 4px", fontSize: 14, background: "transparent", border: "none", color: noAun ? "var(--tx3)" : "var(--acc)" }}>
-                          {noAun ? "☆" : "★"}
-                        </button>
-                        <div style={{ fontSize: 12, flex: 1, cursor: "pointer" }} onClick={() => setEditId(t.id)}>{t.nombre}</div>
-                        <button onClick={() => borrarTarea(t.id)} title="Borrar"
-                          style={{ padding: "0 4px", fontSize: 12, background: "transparent", border: "none", color: "var(--tx3)" }}>×</button>
-                      </div>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                        {t.epica && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)` }}>{t.epica}</span>}
-                        <span className="tag" style={{ background: v.bg, color: `var(--${v.color})` }}>{v.txt}</span>
+                {items.map((t, i) => {
+                  const k = pilarKey(t.epica);
+                  const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
+                  const v = venceInfo(t.fechaVencimiento);
+                  const noAun = t.caracterVisibilidad === "No aún";
+                  const rec = esRecurrente(t);
+                  return (
+                    <div key={t.id}>
+                      {showBar && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2, marginBottom: 6 }} />}
+                      <div
+                        draggable
+                        onDragStart={() => setDrag(t.id)}
+                        onDragEnd={() => { setDrag(null); setDragOver(null); }}
+                        onDragOver={e => {
+                          e.preventDefault(); e.stopPropagation();
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const before = e.clientY < rect.top + rect.height / 2;
+                          setDragOver({ col, index: before ? i : i + 1 });
+                        }}
+                        onDrop={e => { e.stopPropagation(); onDrop(col, dragOver?.col === col ? dragOver.index : i); }}
+                        style={{
+                          background: "var(--bg3)",
+                          border: "1px solid var(--bd)",
+                          borderLeft: `3px solid var(--${k})`,
+                          borderRadius: 6,
+                          padding: 8,
+                          marginBottom: 6,
+                          cursor: "grab",
+                          opacity: drag === t.id ? 0.4 : (noAun ? 0.6 : 1),
+                        }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
+                          <button
+                            onClick={() => setCaracter(t.id, noAun ? "Relevante" : "No aún")}
+                            title={noAun ? "Marcar relevante" : "Marcar no aún"}
+                            style={{ padding: "0 4px", fontSize: 14, background: "transparent", border: "none", color: noAun ? "var(--tx3)" : "var(--acc)" }}>
+                            {noAun ? "☆" : "★"}
+                          </button>
+                          <div style={{ fontSize: 12, flex: 1, cursor: "pointer" }} onClick={() => setEditId(t.id)}>
+                            {t.nombre}
+                            <span className={`recurr-badge ${rec ? "rec" : "pun"}`}>{rec ? "🔁" : "⚡"}</span>
+                          </div>
+                          <button onClick={() => borrarTarea(t.id)} title="Borrar"
+                            style={{ padding: "0 4px", fontSize: 12, background: "transparent", border: "none", color: "var(--tx3)" }}>×</button>
+                        </div>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                          {t.epica && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)` }}>{t.epica}</span>}
+                          <span className="tag" style={{ background: v.bg, color: `var(--${v.color})` }}>{v.txt}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {dragOver?.col === col && dragOver.index === items.length && drag && (
-                <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />
-              )}
+                {dragOver?.col === col && dragOver.index === items.length && drag && (
+                  <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />
+                )}
 
-              {/* Quick add */}
-              <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
-                <input
-                  type="text"
-                  value={quickAdd[col] || ""}
-                  onChange={e => setQuickAdd(prev => ({ ...prev, [col]: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && crearRapida(col)}
-                  placeholder="+ Tarea rápida..."
-                  style={{ fontSize: 11, padding: "4px 8px" }} />
+                {/* Quick add */}
+                <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
+                  <input
+                    type="text"
+                    value={quickAdd[col] || ""}
+                    onChange={e => setQuickAdd(prev => ({ ...prev, [col]: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && crearRapida(col)}
+                    placeholder={filtroPilar !== "todos" ? `+ Nueva ${PILARES.find(p => p.key === filtroPilar)?.emoji}...` : "+ Tarea rápida..."}
+                    style={{ fontSize: 11, padding: "4px 8px" }} />
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {editId && <EditTareaModal tareaId={editId} onClose={() => setEditId(null)} onSaved={cargar} />}

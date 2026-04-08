@@ -60,6 +60,7 @@ model HabitoLog {
   tareaId   String
   tarea     Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
   fecha     String   // YYYY-MM-DD
+  estado    String   @default("hecho") // "hecho" | "fallado"
   createdAt DateTime @default(now())
   @@unique([tareaId, fecha])
 }

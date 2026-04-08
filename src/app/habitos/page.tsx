@@ -16,13 +16,12 @@ function diasAtras(n: number): Date[] {
   }
   return arr;
 }
-function calcRacha(logs: Set<string>): number {
+function calcRacha(logs: Map<string, string>): number {
   let r = 0;
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  // Si hoy todavía no se marcó, no rompe la racha: arranca desde ayer
-  if (!logs.has(ymd(d))) d.setDate(d.getDate() - 1);
-  while (logs.has(ymd(d))) { r++; d.setDate(d.getDate() - 1); }
+  if (logs.get(ymd(d)) !== "hecho") d.setDate(d.getDate() - 1);
+  while (logs.get(ymd(d)) === "hecho") { r++; d.setDate(d.getDate() - 1); }
   return r;
 }
 
@@ -55,21 +54,15 @@ export default function Habitos() {
 
   const dias = diasAtras(DIAS_VISIBLES);
 
-  // index logs por tarea
-  const logsPorTarea = new Map<string, Set<string>>();
+  // index logs por tarea: Map<tareaId, Map<fecha, estado>>
+  const logsPorTarea = new Map<string, Map<string, string>>();
   for (const l of logs) {
-    if (!logsPorTarea.has(l.tareaId)) logsPorTarea.set(l.tareaId, new Set());
-    logsPorTarea.get(l.tareaId)!.add(l.fecha);
+    if (!logsPorTarea.has(l.tareaId)) logsPorTarea.set(l.tareaId, new Map());
+    logsPorTarea.get(l.tareaId)!.set(l.fecha, l.estado || "hecho");
   }
 
   async function toggle(tareaId: string, fecha: string) {
-    // Optimista
-    const set = logsPorTarea.get(tareaId) || new Set();
-    if (set.has(fecha)) {
-      setLogs(prev => prev.filter(l => !(l.tareaId === tareaId && l.fecha === fecha)));
-    } else {
-      setLogs(prev => [...prev, { id: "tmp" + Math.random(), tareaId, fecha }]);
-    }
+    // Ciclar en el servidor (él decide el próximo estado)
     await fetch("/api/habitos/toggle", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ tareaId, fecha }),
@@ -196,8 +189,8 @@ export default function Habitos() {
           <tbody>
             {habitos.map(h => {
               const k = pilarKey(h.epica);
-              const set = logsPorTarea.get(h.id) || new Set();
-              const racha = calcRacha(set);
+              const mapa = logsPorTarea.get(h.id) || new Map<string, string>();
+              const racha = calcRacha(mapa);
               const noAun = h.caracterVisibilidad === "No aún";
               return (
                 <tr key={h.id} style={{ opacity: noAun ? 0.55 : 1 }}>
@@ -217,22 +210,27 @@ export default function Habitos() {
                     </div>
                   </td>
                   <td style={{ textAlign: "center" }}>
-                    <span style={{ fontWeight: 700, color: racha > 0 ? `var(--${k}-t)` : "var(--tx3)" }}>{racha}d</span>
+                    <span style={{ fontWeight: 700, color: racha > 0 ? `var(--${k}-t)` : "var(--tx3)" }}>
+                      🔥{racha}
+                    </span>
                   </td>
                   {dias.map(d => {
                     const fecha = ymd(d);
-                    const hecho = set.has(fecha);
+                    const estado = mapa.get(fecha); // "hecho" | "fallado" | undefined
+                    const hecho = estado === "hecho";
+                    const fallado = estado === "fallado";
                     return (
                       <td key={fecha} style={{ textAlign: "center", padding: 2 }}>
                         <button
                           onClick={() => toggle(h.id, fecha)}
+                          title="Click para ciclar: vacío → hecho → fallado"
                           style={{
                             width: 24, height: 24, padding: 0, borderRadius: 4,
-                            background: hecho ? `var(--${k})` : "var(--bg3)",
-                            border: `1px solid ${hecho ? `var(--${k})` : "var(--bd)"}`,
-                            color: hecho ? "#000" : "var(--tx3)",
+                            background: hecho ? `var(--${k})` : fallado ? "var(--red-b)" : "var(--bg3)",
+                            border: `1px solid ${hecho ? `var(--${k})` : fallado ? "var(--red)" : "var(--bd)"}`,
+                            color: hecho ? "#000" : fallado ? "var(--red-t)" : "var(--tx3)",
                             fontSize: 12, fontWeight: 700,
-                          }}>{hecho ? "✓" : ""}</button>
+                          }}>{hecho ? "✓" : fallado ? "✗" : ""}</button>
                       </td>
                     );
                   })}
