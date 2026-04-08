@@ -110,9 +110,10 @@ function Kanban() {
     return true;
   });
 
-  function itemsDe(col: string) {
+  function itemsDe(col: string, modo?: "puntual" | "recurrente") {
     return tareasFiltradas
       .filter(t => normEstadoEn(t.estado, COLUMNAS) === col)
+      .filter(t => !modo || (modo === "recurrente" ? esRecurrente(t) : !esRecurrente(t)))
       .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || +new Date(a.createdAt) - +new Date(b.createdAt));
   }
 
@@ -289,12 +290,20 @@ function Kanban() {
         </div>
       )}
 
-      <div className="kanban-scroll">
-        <div className="kanban-board">
+      {(() => {
+        const modos: Array<"puntual" | "recurrente"> =
+          filtroRec === "puntual" ? ["puntual"] :
+          filtroRec === "recurrente" ? ["recurrente"] :
+          ["puntual", "recurrente"];
+        return modos.map(modo => (
+          <div key={modo} style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: modo === "puntual" ? "var(--pro-t)" : "var(--apr-t)" }}>
+              {modo === "puntual" ? "⚡ Puntuales" : "🔁 Recurrentes"}
+            </div>
+            <div className="kanban-scroll">
+              <div className="kanban-board">
           {COLUMNAS.map(col => {
-            const items = itemsDe(col);
-            const puntuales = items.filter(t => !esRecurrente(t));
-            const recurrentes = items.filter(t => esRecurrente(t));
+            const items = itemsDe(col, modo);
             const renderCard = (t: any, i: number) => {
                   const k = pilarKey(t.epica);
                   const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
@@ -358,13 +367,7 @@ function Kanban() {
                   <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
                 </div>
 
-                {/* Subseccion: Puntuales arriba */}
-                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--pro-t)", padding: "2px 4px", marginBottom: 4, fontWeight: 700 }}>⚡ Puntuales ({puntuales.length})</div>
-                {puntuales.map((t, i) => renderCard(t, i))}
-
-                {/* Subseccion: Recurrentes abajo */}
-                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--apr-t)", padding: "8px 4px 2px", marginTop: 6, borderTop: "1px dashed var(--bd)", fontWeight: 700 }}>🔁 Recurrentes ({recurrentes.length})</div>
-                {recurrentes.map((t, i) => renderCard(t, puntuales.length + i))}
+                {items.map((t, i) => renderCard(t, i))}
 
                 {dragOver?.col === col && dragOver.index === items.length && drag && (
                   <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />
@@ -383,8 +386,11 @@ function Kanban() {
               </div>
             );
           })}
-        </div>
-      </div>
+              </div>
+            </div>
+          </div>
+        ));
+      })()}
 
       {editId && <EditTareaModal tareaId={editId} onClose={() => setEditId(null)} onSaved={cargar} />}
     </div>
