@@ -365,6 +365,8 @@ export default function Vehiculos() {
             />
           )}
 
+          <FormRegistro vehiculoId={v.id} onGuardado={refrescar} />
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
             <Stat label="Km actuales" value={km(det.kmHoy)} sub={det.kmDia ? `~${km(det.kmDia)} km/día` : undefined} />
             <Stat label="Rendimiento" value={det.rendimientoProm ? `${det.rendimientoProm.toFixed(1)} km/L` : "—"}
@@ -412,8 +414,6 @@ export default function Vehiculos() {
             <div className="card-title">Rendimiento (km/L)</div>
             <GraficoRendimiento puntos={det.rendimientos} />
           </div>
-
-          <FormRegistro vehiculoId={v.id} onGuardado={refrescar} />
 
           <div className="card">
             <div className="card-title">Historial</div>
