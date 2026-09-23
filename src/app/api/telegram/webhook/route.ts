@@ -7,6 +7,8 @@ import { sendTelegram, sendTelegramWithButtons, answerCallback, editTelegramMess
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { askCoach } from "@/lib/coach";
 import { PREGUNTAS } from "@/lib/reflexion";
+import { procesarMensajeVehiculo, enviarEstado, enviarVehiculos, enviarUltimo, manejarCallbackVehiculo } from "@/lib/vehiculos/bot";
+import { transcribirAudioTelegram, transcripcionDisponible } from "@/lib/vehiculos/transcripcion";
 
 async function handleReflexion(text: string, chatId: string): Promise<boolean> {
   const fecha = today();
@@ -49,6 +51,8 @@ async function handleReflexion(text: string, chatId: string): Promise<boolean> {
 }
 
 export const dynamic = "force-dynamic";
+// transcripción + parseo con IA pueden tardar más que el default
+export const maxDuration = 60;
 
 function fmtDate(d: Date) {
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
@@ -99,6 +103,13 @@ async function handleCommand(text: string, chatId: string) {
         "• /vencimientos — próximos vencimientos",
         "• /briefing — resumen matinal",
         "• /coach — recomendación personalizada (IA)",
+        "",
+        "<b>🚗 Vehículos</b>",
+        "Mandame texto o audio: <i>\"cargué 30 litros, 45 lucas, 87.400 km\"</i>",
+        "• /estado — km, rendimiento y próximos vencimientos",
+        "• /vehiculos — elegir vehículo por defecto",
+        "• /ultimo — ver o borrar el último registro",
+        "",
         "• /ayuda — este mensaje",
         "",
         `Tu chat ID: <code>${chatId}</code>`,
@@ -233,6 +244,21 @@ async function handleCommand(text: string, chatId: string) {
     return;
   }
 
+  if (cmd === "/estado") {
+    await enviarEstado(chatId);
+    return;
+  }
+
+  if (cmd === "/vehiculos") {
+    await enviarVehiculos(chatId);
+    return;
+  }
+
+  if (cmd === "/ultimo") {
+    await enviarUltimo(chatId);
+    return;
+  }
+
   if (cmd === "/briefing") {
     // Reusa /hoy pero con encabezado distinto
     await handleCommand("/hoy", chatId);
@@ -260,7 +286,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const data: string = cq.data || "";
-      if (data.startsWith("h:")) {
+      const respVehiculo = await manejarCallbackVehiculo(data, chatId, cq.message.message_id);
+      if (respVehiculo !== null) {
+        await answerCallback(cq.id, respVehiculo);
+      } else if (data.startsWith("h:")) {
         const tareaId = data.slice(2);
         const fecha = today();
         const existing = await prisma.habitoLog.findUnique({
@@ -282,10 +311,10 @@ export async function POST(req: NextRequest) {
     }
 
     const msg = body.message || body.edited_message;
-    if (!msg || !msg.text) return NextResponse.json({ ok: true });
+    const audio = msg?.voice || msg?.audio;
+    if (!msg || (!msg.text && !audio)) return NextResponse.json({ ok: true });
 
     const chatId = String(msg.chat.id);
-    const text = msg.text as string;
 
     // Solo permitir el chat autorizado (seguridad: nadie más puede controlar tu bot)
     const allowed = process.env.TELEGRAM_CHAT_ID;
@@ -294,11 +323,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    if (audio) {
+      if (!transcripcionDisponible()) {
+        await sendTelegram("🎙 Todavía no tengo configurada la transcripción de audios. Mandámelo por texto.", chatId);
+        return NextResponse.json({ ok: true });
+      }
+      let transcripto = "";
+      try {
+        transcripto = await transcribirAudioTelegram(audio.file_id);
+      } catch (e) {
+        console.error("[telegram webhook] transcripción", e);
+      }
+      if (!transcripto) {
+        await sendTelegram("🎙 No pude entender el audio. ¿Me lo mandás por texto?", chatId);
+        return NextResponse.json({ ok: true });
+      }
+      await sendTelegram(`🎙 <i>${escapeHtml(transcripto)}</i>`, chatId);
+      const handled = await procesarMensajeVehiculo(transcripto, chatId, "voz");
+      if (!handled) await sendTelegram("No lo reconocí como un registro de vehículo. Mandá /ayuda para ver qué puedo hacer.", chatId);
+      return NextResponse.json({ ok: true });
+    }
+
+    const text = msg.text as string;
     if (text.startsWith("/")) {
       await handleCommand(text, chatId);
     } else {
-      // Primero intentamos procesar como respuesta a la reflexión diaria
-      const handled = await handleReflexion(text, chatId);
+      // Primero la reflexión diaria (si hay una en curso), después vehículos
+      const handled =
+        (await handleReflexion(text, chatId)) ||
+        (await procesarMensajeVehiculo(text, chatId, "texto"));
       if (!handled) {
         await sendTelegram("Mandá /ayuda para ver los comandos disponibles.", chatId);
       }
