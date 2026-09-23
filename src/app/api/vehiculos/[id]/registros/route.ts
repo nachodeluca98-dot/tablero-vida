@@ -5,11 +5,14 @@ import { TIPOS_MANT, actualizarOdometro, fechaDesdeYmd, recalcularOdometro } fro
 export const dynamic = "force-dynamic";
 
 const num = (x: unknown) => (x === "" || x == null ? null : Number(x));
+const FUENTES = new Set(["formulario", "texto", "voz"]);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const b = await req.json();
   const fecha = fechaDesdeYmd(b.fecha);
   const odometro = num(b.odometro);
+  const fuente = FUENTES.has(b.fuente) ? b.fuente : "formulario";
+  const rawInput = typeof b.rawInput === "string" ? b.rawInput.slice(0, 1000) : null;
 
   if (b.kind === "carga") {
     const litros = num(b.litros);
@@ -24,7 +27,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         precioLitro: monto ? monto / litros : null,
         odometro: odometro != null ? Math.round(odometro) : null,
         tanqueLleno: b.tanqueLleno !== false,
-        fuente: "formulario",
+        fuente,
+        rawInput,
       },
     });
     await actualizarOdometro(params.id, c.odometro, fecha);
@@ -43,7 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         taller: b.taller || null,
         descripcion: b.descripcion || null,
         venceFecha: b.venceFecha ? fechaDesdeYmd(b.venceFecha) : null,
-        fuente: "formulario",
+        fuente,
+        rawInput,
       },
     });
     await actualizarOdometro(params.id, m.odometro, fecha);
