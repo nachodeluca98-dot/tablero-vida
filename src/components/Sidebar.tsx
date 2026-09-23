@@ -12,6 +12,7 @@ const NAV = [
   { href: "/vencimientos", label: "Vencimientos", dot: "var(--ges)" },
   { href: "/habitos", label: "Hábitos", dot: "var(--sal)" },
   { href: "/cronograma", label: "Cronograma", dot: "var(--fit)" },
+  { href: "/vehiculos", label: "Vehículos", dot: "var(--cre)" },
   { href: "/settings", label: "Settings", dot: "var(--tx3)" },
 ];
 

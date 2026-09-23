@@ -7,6 +7,7 @@ import { sendTelegram, escapeHtml } from "@/lib/telegram";
 import { sendPushToAll } from "@/lib/push";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { renewWatchIfNeeded } from "@/lib/googleWatch";
+import { revisarRecordatoriosVehiculos } from "@/lib/vehiculos/recordatorios";
 
 export const dynamic = "force-dynamic";
 
@@ -105,5 +106,8 @@ export async function GET(req: NextRequest) {
   let watch: any = null;
   try { watch = await renewWatchIfNeeded(); } catch (e) { watch = { error: String(e) }; }
 
-  return NextResponse.json({ ok: true, telegram: tg, push, watch });
+  let vehiculos: any = null;
+  try { vehiculos = await revisarRecordatoriosVehiculos(); } catch (e) { vehiculos = { error: String(e) }; }
+
+  return NextResponse.json({ ok: true, telegram: tg, push, watch, vehiculos });
 }

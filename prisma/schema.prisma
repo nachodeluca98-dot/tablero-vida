@@ -129,3 +129,95 @@ model PushSubscription {
   userAgent String?
   createdAt DateTime @default(now())
 }
+
+// ─── Módulo Vehículos ───────────────────────────────────────────
+
+model Vehiculo {
+  id             String                 @id @default(cuid())
+  alias          String
+  marca          String?
+  modelo         String?
+  anio           Int?
+  patente        String?
+  kmActual       Int?
+  kmActualFecha  DateTime?
+  activo         Boolean                @default(true)
+  porDefecto     Boolean                @default(false)
+  cargas         CargaCombustible[]
+  mantenimientos Mantenimiento[]
+  reglas         ReglaMantenimiento[]
+  recordatorios  RecordatorioVehiculo[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+}
+
+model CargaCombustible {
+  id          String   @id @default(cuid())
+  vehiculoId  String
+  vehiculo    Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  fecha       DateTime
+  litros      Float
+  montoTotal  Float?
+  precioLitro Float?
+  odometro    Int?
+  tanqueLleno Boolean  @default(true)
+  estacion    String?
+  notas       String?
+  fuente      String   @default("formulario") // "voz" | "texto" | "formulario"
+  rawInput    String?
+  createdAt   DateTime @default(now())
+
+  @@index([vehiculoId, fecha])
+}
+
+model Mantenimiento {
+  id            String   @id @default(cuid())
+  vehiculoId    String
+  vehiculo      Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  tipo          String // service | aceite | neumaticos | vtv | seguro | patente | reparacion | otro
+  fecha         DateTime
+  odometro      Int?
+  monto         Float?
+  taller        String?
+  descripcion   String?
+  venceFecha    DateTime?
+  venceOdometro Int?
+  fuente        String   @default("formulario")
+  rawInput      String?
+  createdAt     DateTime @default(now())
+
+  @@index([vehiculoId, tipo, fecha])
+}
+
+// vehiculoId null = regla global por defecto; una regla del vehículo con el mismo tipo la pisa
+model ReglaMantenimiento {
+  id             String    @id @default(cuid())
+  vehiculoId     String?
+  vehiculo       Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  tipo           String
+  cadaKm         Int?
+  cadaMeses      Int?
+  avisoKmAntes   Int       @default(500)
+  avisoDiasAntes Int       @default(15)
+  activa         Boolean   @default(true)
+}
+
+model RecordatorioVehiculo {
+  id         String   @id @default(cuid())
+  vehiculoId String
+  vehiculo   Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  tipo       String
+  enviadoAt  DateTime @default(now())
+  canal      String   @default("telegram")
+  estado     String   @default("enviado") // enviado | reconocido | pospuesto
+
+  @@index([vehiculoId, tipo, enviadoAt])
+}
+
+// Mensaje del bot a medio registrar mientras espera la respuesta a una pregunta
+model BotPendiente {
+  id        String   @id
+  payload   String
+  intentos  Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
