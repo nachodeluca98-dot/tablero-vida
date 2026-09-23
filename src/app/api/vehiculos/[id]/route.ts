@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resumenVehiculo } from "@/lib/vehiculos/core";
+import { actualizarSeguro } from "@/lib/vehiculos/seguro";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if ("anio" in data) data.anio = data.anio ? parseInt(String(data.anio)) : null;
   if (data.porDefecto === true) {
     await prisma.vehiculo.updateMany({ data: { porDefecto: false } });
+  }
+  if ("seguroMensual" in b) {
+    const monto = Number(b.seguroMensual);
+    await actualizarSeguro(params.id, monto > 0 ? monto : null, "seguroCompania" in b ? b.seguroCompania?.trim() || null : undefined);
   }
   const v = await prisma.vehiculo.update({ where: { id: params.id }, data });
   return NextResponse.json(v);

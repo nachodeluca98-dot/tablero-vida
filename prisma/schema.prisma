@@ -143,6 +143,8 @@ model Vehiculo {
   kmActualFecha  DateTime?
   activo         Boolean                @default(true)
   porDefecto     Boolean                @default(false)
+  seguroMensual  Float?
+  seguroCompania String?
   cargas         CargaCombustible[]
   mantenimientos Mantenimiento[]
   reglas         ReglaMantenimiento[]
@@ -180,9 +182,10 @@ model Mantenimiento {
   monto         Float?
   taller        String?
   descripcion   String?
+  notas         String?
   venceFecha    DateTime?
   venceOdometro Int?
-  fuente        String   @default("formulario")
+  fuente        String   @default("formulario") // formulario | texto | voz | inicial | auto
   rawInput      String?
   createdAt     DateTime @default(now())
 

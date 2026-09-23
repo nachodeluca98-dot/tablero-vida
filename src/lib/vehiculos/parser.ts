@@ -20,6 +20,7 @@ export type DatosMant = {
   odometro: number | null;
   taller: string | null;
   descripcion: string | null;
+  notas: string | null;
   vence_fecha: string | null;
   fecha: string | null;
 };
@@ -66,10 +67,27 @@ Para "carga_combustible", datos:
   Campos críticos (van en "falta" si no están): "litros", "odometro".
 
 Para "mantenimiento", datos:
-  { "subtipo": "service"|"aceite"|"neumaticos"|"vtv"|"seguro"|"patente"|"reparacion"|"otro",
+  { "subtipo": "service"|"aceite"|"neumaticos"|"correa"|"presion"|"vtv"|"seguro"|"patente"|"reparacion"|"otro",
     "monto": number|null, "odometro": number|null, "taller": string|null,
-    "descripcion": string, "vence_fecha": "YYYY-MM-DD"|null, "fecha": "YYYY-MM-DD" }
+    "descripcion": string, "notas": string|null,
+    "vence_fecha": "YYYY-MM-DD"|null, "fecha": "YYYY-MM-DD" }
   Para aceite, service y neumáticos el campo crítico es "odometro".
+  Cómo repartir la información:
+  - "descripcion": QUÉ se hizo, breve y prolijo (ej. "Reparación de pérdida de aceite, cambio de junta de cárter").
+  - "taller": DÓNDE se hizo (taller, mecánico, lubricentro, concesionaria, nombre o zona).
+  - "monto": CUÁNTO salió en total.
+  - "notas": comentarios adicionales que no son qué/dónde/cuánto (garantía, recomendaciones
+    del mecánico, repuestos a revisar, próximos pasos). null si no hay.
+  Cómo elegir "subtipo":
+  - "aceite" SOLO si es un cambio de aceite y/o filtro de rutina.
+  - "reparacion" para arreglos de fallas: pérdidas (incluso de aceite), roturas, ruidos,
+    frenos, embrague, batería, chapa, electricidad.
+  - "service" para el service general o de mantenimiento programado.
+  - "neumaticos" para rotación, alineación, balanceo o cambio de cubiertas.
+  - "correa" para el cambio de correa (o kit) de distribución.
+  - "presion" para el control o calibración de presión de las gomas.
+  - "seguro" solo si informa la cuota o el pago del seguro.
+  - "vtv" para la verificación técnica; "patente" para el impuesto automotor.
 
 "consulta" = pregunta sobre el estado del auto, gastos, rendimiento o vencimientos. datos: {}.
 "desconocido" = cualquier cosa que no tenga que ver con vehículos. datos: {}.
@@ -90,11 +108,20 @@ Reglas de interpretación:
 - Nunca inventes un valor. Si no está, va null.`;
 }
 
-export async function parsearMensaje(texto: string, vehiculos: Vehiculo[]): Promise<Parseo> {
+export async function parsearMensaje(
+  texto: string,
+  vehiculos: Vehiculo[],
+  pista?: "carga" | "mantenimiento",
+): Promise<Parseo> {
+  const extra = pista === "carga"
+    ? "\n\nEl usuario indicó que se trata de una carga de combustible."
+    : pista === "mantenimiento"
+      ? "\n\nEl usuario indicó que se trata de un mantenimiento, reparación o trámite (no una carga de combustible)."
+      : "";
   const res = await client.messages.create({
     model: "claude-haiku-4-5",
-    max_tokens: 600,
-    system: prompt(vehiculos),
+    max_tokens: 800,
+    system: prompt(vehiculos) + extra,
     messages: [{ role: "user", content: texto }],
   });
   const raw = res.content.filter(b => b.type === "text").map(b => (b as { text: string }).text).join("");

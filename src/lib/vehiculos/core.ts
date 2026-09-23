@@ -4,13 +4,15 @@ import type { CargaCombustible, Mantenimiento, ReglaMantenimiento, Vehiculo } fr
 export const TZ = "America/Argentina/Buenos_Aires";
 const DIA = 86400000;
 
-export const TIPOS_MANT = ["service", "aceite", "neumaticos", "vtv", "seguro", "patente", "reparacion", "otro"] as const;
+export const TIPOS_MANT = ["service", "aceite", "neumaticos", "correa", "presion", "vtv", "seguro", "patente", "reparacion", "otro"] as const;
 export type TipoMant = (typeof TIPOS_MANT)[number];
 
 export const TIPO_LABEL: Record<string, string> = {
   service: "Service",
   aceite: "Aceite y filtro",
   neumaticos: "Rotación de neumáticos",
+  correa: "Correa de distribución",
+  presion: "Presión de neumáticos",
   vtv: "VTV",
   seguro: "Seguro",
   patente: "Patente",
@@ -19,7 +21,7 @@ export const TIPO_LABEL: Record<string, string> = {
 };
 
 export const TIPO_EMOJI: Record<string, string> = {
-  service: "🔧", aceite: "🛢️", neumaticos: "🛞", vtv: "📋",
+  service: "🔧", aceite: "🛢️", neumaticos: "🛞", correa: "⚙️", presion: "🌬️", vtv: "📋",
   seguro: "🛡️", patente: "🧾", reparacion: "🔩", otro: "📌",
 };
 
@@ -139,7 +141,8 @@ export async function reglasEfectivas(vehiculoId: string): Promise<ReglaMantenim
   for (const r of reglas) {
     if (!porTipo.has(r.tipo) || r.vehiculoId) porTipo.set(r.tipo, r);
   }
-  return Array.from(porTipo.values()).filter(r => r.activa);
+  // el seguro se maneja como cuota mensual (ver seguro.ts), no como vencimiento
+  return Array.from(porTipo.values()).filter(r => r.activa && r.tipo !== "seguro");
 }
 
 export function calcularVencimientos(

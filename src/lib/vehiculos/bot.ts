@@ -7,12 +7,13 @@ import {
   recalcularOdometro, resolverVehiculo, resumenVehiculo, vehiculosActivos,
 } from "./core";
 import { parsearMensaje, type Parseo } from "./parser";
+import { actualizarSeguro, confirmarSeguroMes, parsearMonto } from "./seguro";
 
 const PENDIENTE_ID = "vehiculos";
 const PENDIENTE_TTL_MS = 30 * 60 * 1000;
 const MAX_INTENTOS = 2;
 
-type Pendiente = { texto: string; pregunta: string };
+type Pendiente = { texto: string; pregunta: string; seguroVehiculoId?: string };
 
 const PREGUNTAS: Record<string, string> = {
   litros: "¿Cuántos litros cargaste?",
@@ -74,6 +75,24 @@ export async function procesarMensajeVehiculo(texto: string, chatId: string, fue
   if (pendiente && /^(cancel|cancelar|dejalo|dejá|olvidate|nada)\b/i.test(texto.trim())) {
     await borrarPendiente();
     await sendTelegram("👌 Cancelado, no guardé nada.", chatId);
+    return true;
+  }
+
+  if (pendiente?.seguroVehiculoId) {
+    const monto = parsearMonto(texto);
+    if (monto == null || monto <= 0) {
+      if (pendiente.intentos >= 1) {
+        await borrarPendiente();
+        await sendTelegram("No entendí el monto. Podés actualizarlo desde la app, en Vehículos.", chatId);
+      } else {
+        await guardarPendiente(pendiente, pendiente.intentos + 1);
+        await sendTelegram("No entendí el monto. Mandame solo el número, por ejemplo <i>52000</i> o <i>52 lucas</i>.", chatId);
+      }
+      return true;
+    }
+    await borrarPendiente();
+    const v = await actualizarSeguro(pendiente.seguroVehiculoId, monto);
+    await sendTelegram(`🛡️ Listo: el seguro de <b>${nombreVehiculo(v)}</b> ahora es <b>${fmtPesos(monto)}</b> por mes (actualicé también el de este mes).`, chatId);
     return true;
   }
 
@@ -189,6 +208,11 @@ async function guardarCarga(p: Parseo, v: Vehiculo, raw: string, fuente: string,
 async function guardarMantenimiento(p: Parseo, v: Vehiculo, raw: string, fuente: string, chatId: string) {
   const d = p.datos;
   const tipo = (TIPOS_MANT as readonly string[]).includes(d.subtipo ?? "") ? d.subtipo! : "otro";
+  if (tipo === "seguro" && d.monto) {
+    await actualizarSeguro(v.id, d.monto);
+    await sendTelegram(`🛡️ Actualicé el seguro de <b>${nombreVehiculo(v)}</b>: <b>${fmtPesos(d.monto)}</b> por mes.`, chatId);
+    return;
+  }
   const odometro = odometroValido(d.odometro, v);
   const fecha = fechaDesdeYmd(d.fecha);
 
@@ -201,6 +225,7 @@ async function guardarMantenimiento(p: Parseo, v: Vehiculo, raw: string, fuente:
       monto: d.monto ?? null,
       taller: d.taller ?? null,
       descripcion: d.descripcion ?? null,
+      notas: d.notas ?? null,
       venceFecha: d.vence_fecha ? fechaDesdeYmd(d.vence_fecha) : null,
       fuente,
       rawInput: raw,
@@ -312,6 +337,22 @@ export async function manejarCallbackVehiculo(data: string, chatId: string, mess
     const v = await prisma.vehiculo.findUnique({ where: { id } });
     await editTelegramMessage(chatId, messageId, `⭐ Vehículo por defecto: <b>${escapeHtml(v?.alias ?? "?")}</b>`);
     return "Listo";
+  }
+
+  if (data.startsWith("vsok:")) {
+    const id = data.slice(5);
+    await confirmarSeguroMes(id);
+    await editTelegramMessage(chatId, messageId, "🛡️ Seguro del mes verificado. ✓");
+    return "Listo";
+  }
+
+  if (data.startsWith("vs:")) {
+    const id = data.slice(3);
+    const v = await prisma.vehiculo.findUnique({ where: { id } });
+    if (!v) return "Vehículo no encontrado";
+    await guardarPendiente({ texto: "", pregunta: "nueva cuota del seguro", seguroVehiculoId: id }, 0);
+    await editTelegramMessage(chatId, messageId, `🛡️ ¿Cuánto es la nueva cuota del seguro de <b>${nombreVehiculo(v)}</b>? Mandame el monto.`);
+    return "Mandame el monto";
   }
 
   if (data.startsWith("vb:")) {

@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         monto: num(b.monto),
         taller: b.taller || null,
         descripcion: b.descripcion || null,
+        notas: b.notas || null,
         venceFecha: b.venceFecha ? fechaDesdeYmd(b.venceFecha) : null,
         fuente,
         rawInput,

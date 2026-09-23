@@ -9,14 +9,14 @@ export const maxDuration = 30;
 const KM_OBLIGATORIO = new Set(["aceite", "service", "neumaticos"]);
 
 export async function POST(req: NextRequest) {
-  const { texto, vehiculoId } = await req.json();
+  const { texto, vehiculoId, kind } = await req.json();
   if (!texto?.trim()) return NextResponse.json({ error: "Escribí algo primero" }, { status: 400 });
-  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Falta ANTHROPIC_API_KEY" }, { status: 500 });
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "La interpretación con IA no está configurada en este entorno (falta ANTHROPIC_API_KEY)." }, { status: 500 });
 
   const vehiculos = await vehiculosActivos();
   if (!vehiculos.length) return NextResponse.json({ error: "Primero agregá un vehículo" }, { status: 400 });
 
-  const p = await parsearMensaje(texto, vehiculos);
+  const p = await parsearMensaje(texto, vehiculos, kind === "carga" || kind === "mantenimiento" ? kind : undefined);
   if (p.tipo !== "carga_combustible" && p.tipo !== "mantenimiento") {
     return NextResponse.json({ error: "No lo reconocí como una carga o un mantenimiento. Probá con algo como \"35 litros, 45 lucas, 87.400 km\"." }, { status: 422 });
   }
@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       tanqueLleno: d.tanque_lleno ?? true,
       tipo: d.subtipo ?? null,
       descripcion: d.descripcion ?? null,
+      taller: d.taller ?? null,
+      notas: d.notas ?? null,
       venceFecha: d.vence_fecha ?? null,
     },
     faltan: Array.from(faltan),

@@ -1,21 +1,22 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const TIPOS = ["aceite", "service", "neumaticos", "vtv", "seguro", "patente", "reparacion", "otro"];
+// El seguro no va acá: se maneja como cuota mensual
+const TIPOS = ["reparacion", "aceite", "service", "neumaticos", "correa", "presion", "vtv", "patente", "otro"];
 const TIPO_LABEL: Record<string, string> = {
-  service: "Service", aceite: "Aceite y filtro", neumaticos: "Neumáticos", vtv: "VTV",
-  seguro: "Seguro", patente: "Patente", reparacion: "Reparación", otro: "Otro",
+  service: "Service", aceite: "Aceite y filtro", neumaticos: "Neumáticos", correa: "Correa de distribución", presion: "Presión de neumáticos", vtv: "VTV",
+  seguro: "Seguro (cuota)", patente: "Patente", reparacion: "Reparación", otro: "Otro",
 };
 const TIPO_EMOJI: Record<string, string> = {
-  service: "🔧", aceite: "🛢️", neumaticos: "🛞", vtv: "📋", seguro: "🛡️", patente: "🧾", reparacion: "🔩", otro: "📌",
+  service: "🔧", aceite: "🛢️", neumaticos: "🛞", correa: "⚙️", presion: "🌬️", vtv: "📋", seguro: "🛡️", patente: "🧾", reparacion: "🔩", otro: "📌",
 };
 // Agrupación de gastos para el desglose
 const CATEGORIA: Record<string, string> = {
-  aceite: "Mantenimiento", service: "Mantenimiento", neumaticos: "Mantenimiento",
+  aceite: "Mantenimiento", service: "Mantenimiento", neumaticos: "Mantenimiento", correa: "Mantenimiento", presion: "Mantenimiento",
   reparacion: "Reparaciones", otro: "Reparaciones",
   vtv: "Impuestos y seguro", seguro: "Impuestos y seguro", patente: "Impuestos y seguro",
 };
-const CON_VENCIMIENTO = new Set(["vtv", "seguro", "patente"]);
+const CON_VENCIMIENTO = new Set(["vtv", "patente"]);
 
 const km = (n: number | null | undefined) => (n == null ? "—" : Math.round(n).toLocaleString("es-AR"));
 const pesos = (n: number | null | undefined) => (n == null ? "—" : "$" + Math.round(n).toLocaleString("es-AR"));
@@ -111,11 +112,27 @@ function FormVehiculo({ inicial, onGuardar, onCancelar }: { inicial?: any; onGua
   );
 }
 
+const GUIA = {
+  carga: {
+    titulo: "Contá la carga",
+    texto: "Cuántos litros cargaste, cuánto pagaste y cuántos km marca el auto.",
+    ejemplo: "Cargué 35 litros, 45 lucas, 87.400 km, tanque lleno",
+  },
+  mantenimiento: {
+    titulo: "Contá qué pasó",
+    texto: "Qué tuviste que hacer, cuánto te salió, dónde lo hiciste y algún comentario.",
+    ejemplo: "Arreglé una pérdida de aceite, cambiaron la junta del cárter, 120 lucas en el taller de Juan en Ramos. Me dijo que revise el nivel en un mes.",
+  },
+};
+
 function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
   vehiculoId: string; onGuardado: () => void; onCambiarVehiculo: (id: string) => void;
 }) {
   const [kind, setKind] = useState<"carga" | "mantenimiento">("carga");
-  const vacio = () => ({ fecha: hoy(), litros: "", monto: "", odometro: "", tanqueLleno: true, tipo: "aceite", descripcion: "", venceFecha: "" });
+  const vacio = () => ({
+    fecha: hoy(), litros: "", monto: "", odometro: "", tanqueLleno: true,
+    tipo: "reparacion", descripcion: "", taller: "", notas: "", venceFecha: "",
+  });
   const [f, setF] = useState<any>(vacio);
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -150,11 +167,11 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
     const res = await fetch("/api/vehiculos/interpretar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ texto: t, vehiculoId }),
-    });
+      body: JSON.stringify({ texto: t, vehiculoId, kind }),
+    }).catch(() => null);
     setInterpretando(false);
-    const r = await res.json();
-    if (!res.ok) { setError(r.error || "No pude interpretarlo"); return; }
+    const r = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) { setError(r.error || "No pude interpretarlo. Probá de nuevo o completalo a mano."); return; }
 
     const v = r.valores;
     setKind(r.kind);
@@ -167,6 +184,8 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
       tanqueLleno: v.tanqueLleno !== false,
       tipo: v.tipo && TIPOS.includes(v.tipo) ? v.tipo : "otro",
       descripcion: v.descripcion ?? "",
+      taller: v.taller ?? "",
+      notas: v.notas ?? "",
       venceFecha: v.venceFecha ?? "",
     });
     setMarcados(new Set(r.faltan));
@@ -175,17 +194,18 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
     if (r.vehiculoId && r.vehiculoId !== vehiculoId) onCambiarVehiculo(r.vehiculoId);
   }
 
-  function dictar() {
+  function grabar() {
     if (escuchando) { recRef.current?.stop(); return; }
     const w = window as any;
     const rec = new (w.SpeechRecognition || w.webkitSpeechRecognition)();
     rec.lang = "es-AR";
     rec.interimResults = true;
+    rec.continuous = true;
     let final = "";
     rec.onresult = (e: any) => {
       let parcial = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
         else parcial += e.results[i][0].transcript;
       }
       setTexto((final + parcial).trim());
@@ -199,6 +219,7 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
     };
     recRef.current = rec;
     setError("");
+    setTexto("");
     setEscuchando(true);
     rec.start();
   }
@@ -222,51 +243,60 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
     if (marcados.has(k)) setMarcados(m => { const n = new Set(m); n.delete(k); return n; });
   };
 
-  const input = (k: string, label: string, type = "number") => (
+  const input = (k: string, label: string, type = "number", placeholder = "") => (
     <label style={{ display: "block" }}>
       <div style={{ fontSize: 11, color: marcados.has(k) ? "var(--red-t)" : "var(--tx3)", marginBottom: 4 }}>
         {label}{marcados.has(k) ? " · revisar" : ""}
       </div>
-      <input type={type} inputMode={type === "number" ? "decimal" : undefined} value={f[k]}
+      <input type={type} inputMode={type === "number" ? "decimal" : undefined} value={f[k]} placeholder={placeholder}
         onChange={e => cambiar(k, e.target.value)}
         style={marcados.has(k) ? { borderColor: "var(--red)" } : undefined} />
     </label>
   );
 
+  const guia = GUIA[kind];
+  const lleno = !!origen;
+
   return (
     <div className="card">
-      <div className="card-title">Cargar</div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-        <input type="text" value={texto} placeholder={escuchando ? "Te escucho..." : "35 litros, 45 lucas, 87.400 km"}
-          onChange={e => setTexto(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") interpretar(texto, "texto"); }}
-          style={{ flex: 1, minWidth: 0 }} />
+      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+        {(["carga", "mantenimiento"] as const).map(k => (
+          <button key={k} onClick={() => { setKind(k); if (!origen) setError(""); }} className={kind === k ? "primary" : ""}
+            style={{ flex: 1, fontSize: 12, padding: "8px 10px" }}>
+            {k === "carga" ? "⛽ Combustible" : "🔧 Mantenimiento o reparación"}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ background: "var(--bg3)", border: "1px solid var(--bd)", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>{guia.titulo}</div>
+        <div style={{ color: "var(--tx2)", fontSize: 12, marginBottom: 4 }}>{guia.texto}</div>
+        <div style={{ color: "var(--tx3)", fontSize: 11, fontStyle: "italic", marginBottom: 10 }}>Ej: &quot;{guia.ejemplo}&quot;</div>
         {hayMic && (
-          <button onClick={dictar} aria-label="Dictar" title="Dictar"
-            style={{ padding: "6px 12px", background: escuchando ? "var(--red)" : undefined, borderColor: escuchando ? "var(--red)" : undefined }}>
-            {escuchando ? "■" : "🎙"}
+          <button onClick={grabar} disabled={interpretando} className={escuchando ? "" : "primary"}
+            style={{ width: "100%", padding: "12px", fontSize: 14, marginBottom: 8,
+              background: escuchando ? "var(--red)" : undefined, borderColor: escuchando ? "var(--red)" : undefined, color: escuchando ? "#fff" : undefined }}>
+            {escuchando ? "■ Terminar y completar" : interpretando ? "Interpretando..." : "🎙 Grabar audio"}
           </button>
         )}
-        <button className="primary" disabled={interpretando || !texto.trim()} onClick={() => interpretar(texto, "texto")}>
-          {interpretando ? "..." : "Interpretar"}
-        </button>
-      </div>
-      <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 14 }}>
-        Escribí o dictá la carga o el mantenimiento: lo interpreto y completo el formulario para que lo revises.
+        {escuchando && texto && <div style={{ fontSize: 12, color: "var(--tx2)", marginBottom: 8 }}>{texto}</div>}
+        {!escuchando && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <input type="text" value={texto} placeholder={hayMic ? "o escribilo acá" : "Escribilo acá"}
+              onChange={e => setTexto(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") interpretar(texto, "texto"); }}
+              style={{ flex: 1, minWidth: 0 }} />
+            <button disabled={interpretando || !texto.trim()} onClick={() => interpretar(texto, "texto")}>
+              {interpretando ? "..." : "Completar"}
+            </button>
+          </div>
+        )}
       </div>
       {avisos.map(a => <div key={a} style={{ fontSize: 12, color: "var(--amb-t)", marginBottom: 8 }}>⚠️ {a}</div>)}
+      {error && <div style={{ color: "var(--red-t)", fontSize: 12, marginBottom: 8 }}>{error}</div>}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 11, color: "var(--tx3)" }}>
-          {origen ? `Completado desde ${origen.fuente === "voz" ? "🎙 voz" : "💬 texto"}: revisá y registrá` : "O completalo a mano"}
-        </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {(["carga", "mantenimiento"] as const).map(k => (
-            <button key={k} onClick={() => setKind(k)} className={kind === k ? "primary" : ""} style={{ fontSize: 11, padding: "4px 10px" }}>
-              {k === "carga" ? "⛽ Combustible" : "🔧 Mantenimiento"}
-            </button>
-          ))}
-        </div>
+      <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 8 }}>
+        {lleno ? `Completado desde ${origen!.fuente === "voz" ? "🎙 audio" : "💬 texto"}: revisá y registrá` : "O completalo a mano"}
       </div>
       {kind === "carga" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
@@ -284,13 +314,12 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
             </select>
           </label>
           {input("fecha", "Fecha", "date")}
+          {input("monto", "Cuánto salió $")}
           {input("odometro", "Km")}
-          {input("monto", "Monto $")}
+          <div style={{ gridColumn: "1 / -1" }}>{input("descripcion", "Qué se hizo", "text")}</div>
+          <div style={{ gridColumn: "1 / -1" }}>{input("taller", "Dónde (taller, mecánico)", "text")}</div>
+          <div style={{ gridColumn: "1 / -1" }}>{input("notas", "Comentario", "text")}</div>
           {CON_VENCIMIENTO.has(f.tipo) && input("venceFecha", "Vence (opcional)", "date")}
-          <label style={{ display: "block", gridColumn: "1 / -1" }}>
-            <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 4 }}>Descripción</div>
-            <input type="text" value={f.descripcion} onChange={e => cambiar("descripcion", e.target.value)} />
-          </label>
         </div>
       )}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
@@ -301,9 +330,132 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
           </label>
         )}
         <button className="primary" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Registrar"}</button>
-        {origen && <button onClick={limpiar} style={{ fontSize: 11 }}>Descartar</button>}
-        {error && <span style={{ color: "var(--red-t)", fontSize: 12 }}>{error}</span>}
+        {lleno && <button onClick={limpiar} style={{ fontSize: 11 }}>Descartar</button>}
       </div>
+    </div>
+  );
+}
+
+// Filas del estado inicial: se muestran solo las que todavía no tienen registro
+const INICIAL = [
+  { tipo: "aceite", label: "🛢️ Último cambio de aceite", conKm: true },
+  { tipo: "service", label: "🔧 Último service", conKm: true },
+  { tipo: "correa", label: "⚙️ Último cambio de correa de distribución", conKm: true },
+  { tipo: "vtv", label: "📋 Última VTV", conKm: false, conVence: true },
+  { tipo: "neumaticos", label: "🛞 Última rotación de neumáticos", conKm: true },
+] as const;
+
+function EstadoInicial({ det, onGuardado }: { det: any; onGuardado: () => void }) {
+  const v = det.vehiculo;
+  const claveOculto = `vehiculos-inicial-oculto-${v.id}`;
+  const [oculto, setOculto] = useState(true);
+  const [f, setF] = useState<any>({});
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    try { setOculto(localStorage.getItem(claveOculto) === "1"); } catch { setOculto(false); }
+  }, [claveOculto]);
+
+  const sinDatos = new Set(det.vencimientos.filter((x: any) => x.estado === "sin_datos").map((x: any) => x.tipo));
+  const filas = INICIAL.filter(r => sinDatos.has(r.tipo));
+  const faltaSeguro = v.seguroMensual == null;
+  const faltaKm = v.kmActual == null;
+  if (oculto || (!filas.length && !faltaSeguro && !faltaKm)) return null;
+
+  const set = (k: string, campo: string, val: string) => setF((p: any) => ({ ...p, [k]: { ...p[k], [campo]: val } }));
+
+  async function guardar() {
+    setGuardando(true);
+    await fetch(`/api/vehiculos/${v.id}/inicial`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...f, kmActual: f.km?.valor }),
+    });
+    setGuardando(false);
+    setF({});
+    onGuardado();
+  }
+
+  function ocultar() {
+    try { localStorage.setItem(claveOculto, "1"); } catch {}
+    setOculto(true);
+  }
+
+  const lbl = (t: string) => <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 4 }}>{t}</div>;
+
+  return (
+    <div className="card" style={{ borderColor: "var(--acc)" }}>
+      <div className="card-title" style={{ color: "var(--acc)" }}>Arranquemos: estado actual de {v.alias}</div>
+      <div style={{ fontSize: 12, color: "var(--tx2)", marginBottom: 12 }}>
+        Con esto calculo los próximos vencimientos desde hoy. Completá lo que sepas, lo demás lo dejás vacío.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {faltaKm && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>📍 Km actuales</div>
+            <input type="number" inputMode="numeric" value={f.km?.valor ?? ""} onChange={e => set("km", "valor", e.target.value)} />
+          </div>
+        )}
+        {filas.map(r => (
+          <div key={r.tipo}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{r.label}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <label>{lbl("Fecha")}<input type="date" value={f[r.tipo]?.fecha ?? ""} onChange={e => set(r.tipo, "fecha", e.target.value)} /></label>
+              {r.conKm && <label>{lbl("Km")}<input type="number" inputMode="numeric" value={f[r.tipo]?.km ?? ""} onChange={e => set(r.tipo, "km", e.target.value)} /></label>}
+              {"conVence" in r && <label>{lbl("Vence (si figura en la oblea)")}<input type="date" value={f[r.tipo]?.vence ?? ""} onChange={e => set(r.tipo, "vence", e.target.value)} /></label>}
+            </div>
+          </div>
+        ))}
+        {faltaSeguro && (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>🛡️ Seguro</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <label>{lbl("Cuota mensual actual $")}<input type="number" inputMode="numeric" value={f.seguro?.monto ?? ""} onChange={e => set("seguro", "monto", e.target.value)} /></label>
+              <label>{lbl("Compañía (opcional)")}<input type="text" value={f.seguro?.compania ?? ""} onChange={e => set("seguro", "compania", e.target.value)} /></label>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--tx3)", marginTop: 4 }}>Se registra solo todos los meses; si cambia, lo actualizás en un toque.</div>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button className="primary" disabled={guardando} onClick={guardar}>{guardando ? "Guardando..." : "Guardar"}</button>
+        <button onClick={ocultar}>Ahora no</button>
+      </div>
+    </div>
+  );
+}
+
+function Seguro({ v, onGuardar }: { v: any; onGuardar: (data: any) => Promise<void> }) {
+  const [editando, setEditando] = useState(false);
+  const [monto, setMonto] = useState("");
+  const [compania, setCompania] = useState("");
+  const abrir = () => { setMonto(v.seguroMensual ?? ""); setCompania(v.seguroCompania ?? ""); setEditando(true); };
+
+  return (
+    <div className="card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div>
+          <div className="card-title" style={{ marginBottom: 4 }}>🛡️ Seguro</div>
+          {v.seguroMensual != null
+            ? <div><span style={{ fontSize: 18, fontWeight: 700 }}>{pesos(v.seguroMensual)}</span><span style={{ color: "var(--tx3)" }}> /mes{v.seguroCompania ? ` · ${v.seguroCompania}` : ""}</span></div>
+            : <div style={{ color: "var(--tx3)", fontSize: 12 }}>Sin cargar</div>}
+        </div>
+        {!editando && <button onClick={abrir}>{v.seguroMensual != null ? "Actualizar monto" : "Cargar"}</button>}
+      </div>
+      {editando && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ flex: 1, minWidth: 120 }}>
+            <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 4 }}>Cuota mensual $</div>
+            <input type="number" inputMode="numeric" value={monto} onChange={e => setMonto(e.target.value)} />
+          </label>
+          <label style={{ flex: 1, minWidth: 120 }}>
+            <div style={{ fontSize: 11, color: "var(--tx3)", marginBottom: 4 }}>Compañía</div>
+            <input type="text" value={compania} onChange={e => setCompania(e.target.value)} />
+          </label>
+          <button className="primary" onClick={async () => { await onGuardar({ seguroMensual: monto, seguroCompania: compania }); setEditando(false); }}>Guardar</button>
+          <button onClick={() => setEditando(false)}>Cancelar</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -311,7 +463,7 @@ function FormRegistro({ vehiculoId, onGuardado, onCambiarVehiculo }: {
 function Reglas() {
   const [reglas, setReglas] = useState<any[]>([]);
   const [guardado, setGuardado] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/vehiculos/reglas").then(r => r.json()).then(setReglas); }, []);
+  useEffect(() => { fetch("/api/vehiculos/reglas").then(r => r.json()).then((rs: any[]) => setReglas(rs.filter(r => r.tipo !== "seguro"))); }, []);
 
   async function guardar(r: any) {
     await fetch("/api/vehiculos/reglas", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
@@ -346,6 +498,103 @@ function Reglas() {
   );
 }
 
+const NIVELES = [
+  { key: "urgente", label: "Urgente", color: "red" },
+  { key: "importante", label: "Importante", color: "amb" },
+  { key: "relevante", label: "Relevante", color: "ges" },
+] as const;
+const PIDE_KM = new Set(["aceite", "service", "neumaticos", "correa"]);
+
+function ItemPendiente({ p, mostrarAlias, onListo }: { p: any; mostrarAlias: boolean; onListo: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [kmVal, setKmVal] = useState<string>(p.kmHoy != null ? String(p.kmHoy) : "");
+  const [monto, setMonto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function hecho(extra: any = {}) {
+    setEnviando(true);
+    await fetch(`/api/vehiculos/${p.vehiculoId}/hecho`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: p.tipo, ...extra }),
+    });
+    setEnviando(false);
+    setAbierto(false);
+    onListo();
+  }
+
+  async function cambioSeguro() {
+    const nuevo = prompt("¿Cuál es la cuota mensual actual del seguro?");
+    const n = Number(String(nuevo ?? "").replace(/[^\d]/g, ""));
+    if (!n) return;
+    await fetch(`/api/vehiculos/${p.vehiculoId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seguroMensual: n }),
+    });
+    onListo();
+  }
+
+  const btn = { fontSize: 11, padding: "3px 10px" };
+  return (
+    <div style={{ padding: "8px 0", borderTop: "1px solid var(--bd)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>{p.emoji} {p.titulo}</div>
+          <div style={{ fontSize: 11, color: "var(--tx3)" }}>{mostrarAlias ? `${p.alias} · ` : ""}{p.detalle}</div>
+        </div>
+        {!abierto && (
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {p.tipo === "seguro" ? (
+              <>
+                <button style={btn} disabled={enviando} onClick={() => hecho()}>✓ Está bien</button>
+                <button style={btn} onClick={cambioSeguro}>Cambió</button>
+              </>
+            ) : (
+              <button style={btn} disabled={enviando} onClick={() => (PIDE_KM.has(p.tipo) ? setAbierto(true) : hecho())}>✓ Hecho</button>
+            )}
+          </div>
+        )}
+      </div>
+      {abierto && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label style={{ flex: 1, minWidth: 90 }}>
+            <div style={{ fontSize: 10, color: "var(--tx3)", marginBottom: 3 }}>Km</div>
+            <input type="number" inputMode="numeric" value={kmVal} onChange={e => setKmVal(e.target.value)} />
+          </label>
+          <label style={{ flex: 1, minWidth: 90 }}>
+            <div style={{ fontSize: 10, color: "var(--tx3)", marginBottom: 3 }}>Cuánto salió $</div>
+            <input type="number" inputMode="numeric" value={monto} onChange={e => setMonto(e.target.value)} />
+          </label>
+          <button className="primary" style={btn} disabled={enviando} onClick={() => hecho({ odometro: kmVal, monto })}>Guardar</button>
+          <button style={btn} onClick={() => setAbierto(false)}>✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pendientes({ items, variosVehiculos, onListo }: { items: any[]; variosVehiculos: boolean; onListo: () => void }) {
+  if (!items.length) {
+    return <div className="card" style={{ marginBottom: 16, color: "var(--sal-t)" }}>✨ Nada pendiente con tus vehículos.</div>;
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>
+      {NIVELES.map(n => {
+        const lista = items.filter(i => i.nivel === n.key);
+        if (!lista.length) return null;
+        return (
+          <div key={n.key} className="card" style={{ borderColor: `var(--${n.color})`, background: `linear-gradient(var(--${n.color}-b), var(--${n.color}-b)), var(--bg2)` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: `var(--${n.color}-t)`, textTransform: "uppercase", letterSpacing: ".06em" }}>{n.label}</div>
+              <span className="tag" style={{ background: `var(--${n.color})`, color: "#000" }}>{lista.length}</span>
+            </div>
+            {lista.map(p => <ItemPendiente key={p.id} p={p} mostrarAlias={variosVehiculos} onListo={onListo} />)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Vehiculos() {
   const [lista, setLista] = useState<any[] | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
@@ -353,6 +602,12 @@ export default function Vehiculos() {
   const [creando, setCreando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [periodo, setPeriodo] = useState<"30" | "365" | "todo">("365");
+  const [pendientes, setPendientes] = useState<any[]>([]);
+
+  const cargarPendientes = useCallback(async () => {
+    setPendientes(await fetch("/api/vehiculos/pendientes").then(r => r.json()));
+  }, []);
+  useEffect(() => { cargarPendientes(); }, [cargarPendientes]);
 
   const cargarLista = useCallback(async () => {
     const l = await fetch("/api/vehiculos").then(r => r.json());
@@ -368,7 +623,7 @@ export default function Vehiculos() {
   useEffect(() => { cargarLista(); }, [cargarLista]);
   useEffect(() => { cargarDetalle(); }, [cargarDetalle]);
 
-  const refrescar = async () => { await Promise.all([cargarLista(), cargarDetalle()]); };
+  const refrescar = async () => { await Promise.all([cargarLista(), cargarDetalle(), cargarPendientes()]); };
 
   const historial = useMemo(() => {
     if (!det) return [];
@@ -425,15 +680,19 @@ export default function Vehiculos() {
             const nuevo = await fetch("/api/vehiculos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) }).then(r => r.json());
             setCreando(false);
             setSelId(nuevo.id);
-            await cargarLista();
+            await Promise.all([cargarLista(), cargarPendientes()]);
           }}
         />
       )}
 
+      {lista.some(x => x.activo) && (
+        <Pendientes items={pendientes} variosVehiculos={lista.filter(x => x.activo).length > 1} onListo={refrescar} />
+      )}
+
       {lista.length === 0 && !creando && (
         <div className="card" style={{ color: "var(--tx2)", lineHeight: 1.6 }}>
-          Todavía no cargaste ningún vehículo. Agregá uno y después registrá cargas mandándole al bot de Telegram
-          un texto o audio como <i>&quot;cargué 30 litros, 45 lucas, 87.400 km&quot;</i>.
+          Todavía no cargaste ningún vehículo. Tocá <b>+ Vehículo</b> para agregarlo: después te pido el estado
+          actual (último cambio de aceite, VTV, seguro) y listo.
         </div>
       )}
 
@@ -483,6 +742,8 @@ export default function Vehiculos() {
             />
           )}
 
+          <EstadoInicial key={`inicial-${v.id}`} det={det} onGuardado={refrescar} />
+
           <FormRegistro vehiculoId={v.id} onGuardado={refrescar} onCambiarVehiculo={setSelId} />
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
@@ -528,6 +789,8 @@ export default function Vehiculos() {
             </div>
           </div>
 
+          <Seguro key={`seguro-${v.id}`} v={v} onGuardar={patchVehiculo} />
+
           <div className="card">
             <div className="card-title">Rendimiento (km/L)</div>
             <GraficoRendimiento puntos={det.rendimientos} />
@@ -548,10 +811,12 @@ export default function Vehiculos() {
                   <div style={{ fontSize: 11, color: "var(--tx3)" }}>
                     {fecha(h.fecha)}
                     {h.kind === "carga" && h.precioLitro ? ` · ${pesos(h.precioLitro)}/L` : ""}
-                    {h.descripcion ? ` · ${h.descripcion}` : ""}
+                    {h.taller ? ` · 📍 ${h.taller}` : ""}
                     {h.venceFecha ? ` · vence ${fecha(h.venceFecha)}` : ""}
-                    {h.fuente !== "formulario" ? ` · ${h.fuente === "voz" ? "🎙" : "💬"}` : ""}
+                    {h.fuente === "voz" ? " · 🎙" : h.fuente === "texto" ? " · 💬" : h.fuente === "auto" ? " · automático" : ""}
                   </div>
+                  {h.descripcion && <div style={{ fontSize: 12, color: "var(--tx2)", marginTop: 2 }}>{h.descripcion}</div>}
+                  {h.notas && <div style={{ fontSize: 11, color: "var(--tx3)", marginTop: 2, fontStyle: "italic" }}>💭 {h.notas}</div>}
                 </div>
                 <button onClick={() => borrar(h)} style={{ fontSize: 11, padding: "2px 8px", color: "var(--tx3)" }}>✕</button>
               </div>

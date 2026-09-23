@@ -8,6 +8,7 @@ import { sendPushToAll } from "@/lib/push";
 import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { renewWatchIfNeeded } from "@/lib/googleWatch";
 import { revisarRecordatoriosVehiculos } from "@/lib/vehiculos/recordatorios";
+import { registrarSegurosDelMes } from "@/lib/vehiculos/seguro";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +108,9 @@ export async function GET(req: NextRequest) {
   try { watch = await renewWatchIfNeeded(); } catch (e) { watch = { error: String(e) }; }
 
   let vehiculos: any = null;
-  try { vehiculos = await revisarRecordatoriosVehiculos(); } catch (e) { vehiculos = { error: String(e) }; }
+  try {
+    vehiculos = { ...(await revisarRecordatoriosVehiculos()), ...(await registrarSegurosDelMes()) };
+  } catch (e) { vehiculos = { error: String(e) }; }
 
   return NextResponse.json({ ok: true, telegram: tg, push, watch, vehiculos });
 }
