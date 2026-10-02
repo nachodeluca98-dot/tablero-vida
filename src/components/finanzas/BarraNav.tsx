@@ -1,0 +1,35 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+// Barra inferior del módulo (spec §5.1). "＋ Cargar" siempre visible al centro.
+const TABS = [
+  { href: "/finanzas", label: "Inicio", ico: "🏠", exacto: true },
+  { href: "/finanzas/movimientos", label: "Movimientos", ico: "📋" },
+  { href: "/finanzas/cargar", label: "Cargar", ico: "+", cargar: true },
+  { href: "/finanzas/estadisticas", label: "Estadísticas", ico: "📊" },
+  { href: "/finanzas/mas", label: "Más", ico: "☰" },
+];
+
+// Secciones que viven dentro de "Más"
+const EN_MAS = ["/finanzas/presupuesto", "/finanzas/metas", "/finanzas/patrimonio", "/finanzas/configuracion", "/finanzas/guias"];
+
+export default function BarraNav() {
+  const pathname = usePathname() || "";
+  const activo = (t: (typeof TABS)[number]) =>
+    t.exacto ? pathname === t.href
+    : pathname.startsWith(t.href) || (t.href === "/finanzas/mas" && EN_MAS.some((p) => pathname.startsWith(p)));
+
+  return (
+    <nav className="fin-nav" aria-label="Finanzas">
+      <div className="fin-nav-inner">
+        {TABS.map((t) => (
+          <Link key={t.href} href={t.href} className={`${t.cargar ? "cargar" : ""} ${activo(t) ? "activo" : ""}`} aria-current={activo(t) ? "page" : undefined}>
+            <span className="ico" aria-hidden>{t.ico}</span>
+            {t.label}
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
+}
