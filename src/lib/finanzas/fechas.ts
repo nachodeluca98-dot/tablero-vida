@@ -46,3 +46,11 @@ export function diaReal(anioMes: string, dia: number): number {
   const ultimo = diasDelMes(anioMes);
   return dia <= 0 || dia > ultimo ? ultimo : dia;
 }
+
+// Mes de imputación (spec §3.3). Tarjeta: consumo hasta el día de cierre → se paga el mes siguiente;
+// después del cierre → dentro de dos meses. Resto de los medios: el mes de la fecha.
+export function mesImputacion(fechaISO: string, medioPago: string | null | undefined, diaCierre: number | null | undefined): string {
+  const am = anioMesDe(fechaISO);
+  if (medioPago !== "tarjeta_credito" || !diaCierre) return am;
+  return sumarMeses(am, Number(fechaISO.slice(8, 10)) <= diaCierre ? 1 : 2);
+}
