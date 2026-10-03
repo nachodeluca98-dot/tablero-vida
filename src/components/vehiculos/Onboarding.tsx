@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Campo, Sheet, Tip, api, guardarLocal, leerLocal } from "./comun";
+import { Campo, Sheet, Tip, api, guardarLocal, leerLocal } from "@/components/ui";
 
 export function Bienvenida({ onEmpezar }: { onEmpezar: () => void }) {
   const pasos = [

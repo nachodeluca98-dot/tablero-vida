@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CargaSheet, { type Preset } from "@/components/vehiculos/CargaSheet";
-import { Sheet, TIPO_LABEL, Toast, type ToastData, api, guardarLocal, km, leerLocal } from "@/components/vehiculos/comun";
+import { TIPO_LABEL, km } from "@/components/vehiculos/comun";
+import { Sheet, Toast, type ToastData, api, guardarLocal, leerLocal } from "@/components/ui";
 import { AltaVehiculo, Bienvenida, EstadoInicialForm, PrimerosPasos } from "@/components/vehiculos/Onboarding";
 import { Ajustes, Gastos, Historial, Pendientes, Resumen } from "@/components/vehiculos/Secciones";
 

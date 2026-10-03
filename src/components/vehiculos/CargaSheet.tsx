@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CON_VENCIMIENTO, Campo, Sheet, TIPOS, TIPO_EMOJI, TIPO_LABEL, Tip, api, hoy } from "./comun";
+import { CON_VENCIMIENTO, TIPOS, TIPO_EMOJI, TIPO_LABEL } from "./comun";
+import { Campo, Sheet, Tip, api, hoy } from "@/components/ui";
 
 export type Opcion = "carga" | "mantenimiento" | "reparacion";
 export type Preset = { opcion: Opcion; tipo?: string; manual?: boolean };

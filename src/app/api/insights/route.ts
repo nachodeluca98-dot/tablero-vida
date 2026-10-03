@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { pilarKey, PILARES } from "@/lib/pilares";
+import { DIAS_CORTOS, diaSemanaAR } from "@/lib/dias";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,13 @@ export async function GET() {
   const inicioHoy = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const finHoy = new Date(+inicioHoy + 86400000);
 
-  const DIAS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-  const diaSemana = DIAS[now.getDay()];
-  const horaActual = now.getHours() * 60 + now.getMinutes();
+  const diaSemana = DIAS_CORTOS[diaSemanaAR(now)];
+  const [hAR, mAR] = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" }).split(":").map(Number);
+  const horaActual = hAR * 60 + mAR;
 
   const [habitos, tareasHoy, vencen, todasTareas, bloques] = await Promise.all([
     prisma.tarea.findMany({
-      where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
+      where: { tipo: "Hábito", mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
       include: { habitoLogs: { where: { fecha: { in: [hoy, ayer] } } } },
     }),
     prisma.tarea.findMany({
@@ -76,6 +77,8 @@ export async function GET() {
   const bloqueActual = bloques.find(b => {
     const ini = parseHora(b.horarioInicio);
     const fin = parseHora(b.horarioFin);
+    // bloques que cruzan la medianoche (22:30–01:00)
+    if (fin <= ini) return horaActual >= ini || horaActual < fin;
     return horaActual >= ini && horaActual < fin;
   });
   const bloqueProximo = bloques.find(b => parseHora(b.horarioInicio) > horaActual);

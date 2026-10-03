@@ -9,6 +9,7 @@ import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { renewWatchIfNeeded } from "@/lib/googleWatch";
 import { revisarRecordatoriosVehiculos } from "@/lib/vehiculos/recordatorios";
 import { registrarSegurosDelMes } from "@/lib/vehiculos/seguro";
+import { DIAS_CORTOS, DIAS_LARGOS, diaSemanaAR } from "@/lib/dias";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
   const inicio = new Date(t.getFullYear(), t.getMonth(), t.getDate());
   const fin = new Date(inicio); fin.setDate(fin.getDate() + 1);
   const en7 = new Date(inicio); en7.setDate(en7.getDate() + 7);
-  const dia = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"][t.getDay()];
+  const dia = DIAS_LARGOS[diaSemanaAR(t)];
 
   const [tareasHoy, bloques, vencen] = await Promise.all([
     prisma.tarea.findMany({
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       take: 15,
     }),
     prisma.cronogramaBase.findMany({
-      where: { dia },
+      where: { dia: DIAS_CORTOS[diaSemanaAR(t)] },
       orderBy: { horarioInicio: "asc" },
     }),
     prisma.tarea.findMany({
@@ -92,9 +93,12 @@ export async function GET(req: NextRequest) {
 
   lines.push("", "💪 ¡A romperla!");
 
-  const tg = await sendTelegram(lines.join("\n"));
+  const settings = await prisma.settings.findUnique({ where: { id: "user" } });
+  const activo = settings?.briefingActivo !== false;
 
-  const push = await sendPushToAll({
+  const tg = activo ? await sendTelegram(lines.join("\n")) : { ok: false, error: "briefing_desactivado" };
+
+  const push = !activo ? null : await sendPushToAll({
     title: `☀️ Buen día — ${dia} ${fmtDate(t)}`,
     body: tareasHoy.length
       ? `${tareasHoy.length} tareas hoy${vencen.length ? ` · ${vencen.length} vencimientos próximos` : ""}`

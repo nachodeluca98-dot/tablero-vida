@@ -5,15 +5,13 @@ import { useState, useEffect } from "react";
 import { PILARES } from "@/lib/pilares";
 
 const NAV = [
-  { href: "/", label: "Dashboard", dot: "var(--acc)" },
-  { href: "/timeline", label: "Timeline", dot: "var(--met)" },
-  { href: "/kanban", label: "Kanban", dot: "var(--mus)" },
-  { href: "/calendario", label: "Calendario", dot: "var(--pro)" },
-  { href: "/vencimientos", label: "Vencimientos", dot: "var(--ges)" },
-  { href: "/habitos", label: "Hábitos", dot: "var(--sal)" },
-  { href: "/cronograma", label: "Cronograma", dot: "var(--fit)" },
-  { href: "/vehiculos", label: "Vehículos", dot: "var(--cre)" },
-  { href: "/settings", label: "Settings", dot: "var(--tx3)" },
+  { href: "/", label: "Hoy", ico: "☀️" },
+  { href: "/kanban", label: "Tareas", ico: "✅" },
+  { href: "/habitos", label: "Hábitos", ico: "🔥" },
+  { href: "/cronograma", label: "Semana", ico: "🗓️" },
+  { href: "/vencimientos", label: "Vencimientos", ico: "⏰" },
+  { href: "/vehiculos", label: "Vehículos", ico: "🚗" },
+  { href: "/settings", label: "Ajustes", ico: "⚙️" },
 ];
 
 export default function Sidebar() {
@@ -21,6 +19,11 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    const abrir = () => setOpen(true);
+    window.addEventListener("abrir-menu", abrir);
+    return () => window.removeEventListener("abrir-menu", abrir);
+  }, []);
 
   return (
     <>
@@ -45,7 +48,7 @@ export default function Sidebar() {
                 background: active ? "var(--bg3)" : "transparent",
                 textDecoration: "none", fontWeight: active ? 600 : 400, marginBottom: 2,
               }}>
-              <div style={{ width: 8, height: 8, borderRadius: 999, background: n.dot }} />
+              <span style={{ width: 18, textAlign: "center" }}>{n.ico}</span>
               {n.label}
             </Link>
           );
