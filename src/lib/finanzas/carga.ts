@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { Borrador, MEDIOS_PAGO, MedioPago, nuevaKey } from "./borrador";
 import { equivalentes } from "./dinero";
 import { anioMesActual, fechaDB, hoyISO, isoDeFechaDB, mesImputacion, sumarMeses } from "./fechas";
-import { obtenerMes } from "./meses";
+import { obtenerMes, tcVigente } from "./meses";
 import type { ContextoParser, RegistroParseado } from "./parser";
 
-const norm = (s: string | null | undefined) =>
-  (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+// Texto comparable: minúsculas, sin acentos ni signos
+export const normalizar = (s: string | null | undefined) =>
+  (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const norm = normalizar;
 
 // ─── Datos para la pantalla de carga ────────────────────────────
 
@@ -208,16 +210,6 @@ export async function marcarDuplicados(borradores: Borrador[]): Promise<Borrador
 
 // ─── Guardar ────────────────────────────────────────────────────
 
-// TC para convertir: el del mes de imputación; si todavía no tiene, el último cargado (se recalcula al cargarlo)
-async function tcPara(anioMes: string): Promise<number | null> {
-  const m = await prisma.finMes.findFirst({
-    where: { anioMes: { lte: anioMes }, tipoCambio: { not: null } },
-    orderBy: { anioMes: "desc" },
-    select: { tipoCambio: true },
-  });
-  return m?.tipoCambio?.toNumber() ?? null;
-}
-
 export type Origen = "app_voz" | "app_rapida" | "app_formulario";
 
 export type ResultadoGuardado = { ids: string[]; planes: { registroId: string; texto: string }[] };
@@ -237,7 +229,7 @@ export async function guardarBorradores(borradores: Borrador[], origen: Origen, 
       b.medioPago === "tarjeta_credito" ? tarjetas.find((t) => t.id === b.tarjetaId) ?? tarjetas[0] ?? null : null;
     const anioMes = b.mesImputacionManual ? b.mesImputacion : mesImputacion(b.fecha, b.medioPago, tarjeta?.diaCierre);
     const mes = await obtenerMes(anioMes);
-    const tc = await tcPara(anioMes);
+    const tc = await tcVigente(anioMes);
     const item = b.tipo === "gasto" || b.tipo === "ingreso" ? await itemVinculable(b, mes.id) : null;
     const cat = b.categoriaId ? catPorId.get(b.categoriaId) : undefined;
 
@@ -302,7 +294,7 @@ export async function guardarBorradores(borradores: Borrador[], origen: Origen, 
         for (let n = 1; n <= cuotas; n++) {
           const am = sumarMeses(anioMes, n - 1);
           const mesN = n === 1 ? mes : await tx.finMes.upsert({ where: { anioMes: am }, update: {}, create: { anioMes: am } });
-          const tcN = n === 1 ? tc : await tcPara(am);
+          const tcN = n === 1 ? tc : await tcVigente(am);
           const eqN = equivalentes(montoRegistro, b.moneda, tcN);
           const it = await tx.finPresupuestoItem.create({
             data: {

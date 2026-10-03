@@ -30,6 +30,16 @@ export async function obtenerPreferencias() {
   );
 }
 
+// TC para convertir montos de un mes: el suyo; si todavía no tiene, el último cargado antes (se recalcula al cargarlo)
+export async function tcVigente(anioMes: string): Promise<number | null> {
+  const m = await prisma.finMes.findFirst({
+    where: { anioMes: { lte: anioMes }, tipoCambio: { not: null } },
+    orderBy: { anioMes: "desc" },
+    select: { tipoCambio: true },
+  });
+  return m?.tipoCambio?.toNumber() ?? null;
+}
+
 // Último tipo de cambio cargado antes de ese mes, para prellenar (spec §2.2.3)
 export async function ultimoTipoCambio(anterioresA: string) {
   return prisma.finMes.findFirst({

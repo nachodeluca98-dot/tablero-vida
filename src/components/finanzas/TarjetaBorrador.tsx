@@ -31,7 +31,7 @@ export function conImputacion(b: Borrador, tarjetas: DatosCarga["tarjetas"]): Bo
 }
 
 export default function TarjetaBorrador({
-  b, datos, onChange, onQuitar, ocultarMonto, ocultarCategoria,
+  b, datos, onChange, onQuitar, ocultarMonto, ocultarCategoria, ocultarCuotas, mostrarMesSiempre,
 }: {
   b: Borrador;
   datos: DatosCarga;
@@ -39,6 +39,8 @@ export default function TarjetaBorrador({
   onQuitar?: () => void;
   ocultarMonto?: boolean;
   ocultarCategoria?: boolean;
+  ocultarCuotas?: boolean; // en un movimiento ya guardado el plan de cuotas no se edita desde acá
+  mostrarMesSiempre?: boolean;
 }) {
   const [abierto, setAbierto] = useState<Selector>(null);
   const [editMonto, setEditMonto] = useState(false);
@@ -122,10 +124,12 @@ export default function TarjetaBorrador({
           {b.medioPago ? (b.medioPago === "tarjeta_credito" && tarjeta ? `💳 ${tarjeta.nombre}` : MEDIO_LABEL[b.medioPago]) : "Medio de pago"}
         </button>
         <button type="button" className={`fin-chip ${abierto === "fecha" ? "activo" : ""}`} onClick={() => toggle("fecha")}>📅 {fechaLinda(b.fecha)}</button>
-        {(b.mesImputacion !== mesFecha || b.mesImputacionManual) && (
-          <button type="button" className={`fin-chip activo`} onClick={() => toggle("mes")}>Se paga en {nombreMes(b.mesImputacion)}</button>
+        {(mostrarMesSiempre || b.mesImputacion !== mesFecha || b.mesImputacionManual) && (
+          <button type="button" className={`fin-chip ${b.mesImputacion !== mesFecha ? "activo" : ""}`} onClick={() => toggle("mes")}>
+            {b.mesImputacion !== mesFecha ? "Se paga en" : "Mes:"} {nombreMes(b.mesImputacion)}
+          </button>
         )}
-        {b.medioPago === "tarjeta_credito" && (
+        {b.medioPago === "tarjeta_credito" && !ocultarCuotas && (
           <button type="button" className={`fin-chip ${abierto === "cuotas" ? "activo" : ""}`} onClick={() => toggle("cuotas")}>
             {b.cuotasTotal && b.cuotasTotal > 1 ? `${b.cuotasTotal} cuotas` : "1 pago"}
           </button>
@@ -180,7 +184,7 @@ export default function TarjetaBorrador({
       )}
       {abierto === "mes" && (
         <div className="fin-selector fin-chips">
-          {[0, 1, 2].map((n) => {
+          {[-1, 0, 1, 2].map((n) => {
             const am = sumarMeses(mesFecha, n);
             return (
               <button key={am} type="button" className={`fin-chip ${b.mesImputacion === am ? "activo" : ""}`} onClick={() => { onChange({ ...b, mesImputacion: am, mesImputacionManual: true }); setAbierto(null); }}>
