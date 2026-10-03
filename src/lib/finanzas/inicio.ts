@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { Montos, sumarMontos } from "./dinero";
 import { anioMesActual, diaReal, diasDelMes, hoyISO, isoDeFechaDB, fechaDB, nombreMes, sumarMeses } from "./fechas";
-import { obtenerMes, ultimoTipoCambio } from "./meses";
+import { obtenerMes, obtenerPreferencias, ultimoTipoCambio } from "./meses";
 
 const num = (d: { toNumber(): number } | null | undefined) => (d == null ? null : d.toNumber());
 
@@ -72,7 +72,7 @@ export function rutaRevision(revision: "quincenal" | "cierre", anioMes: string) 
 // ─── Próximo paso ───────────────────────────────────────────────
 
 async function calcularProximoPaso(anioMes: string, hoy: string): Promise<ProximoPaso> {
-  const prefs = await prisma.finPreferencias.upsert({ where: { id: "user" }, update: {}, create: { id: "user" } });
+  const prefs = await obtenerPreferencias();
 
   if (prefs.onboardingPaso !== -1) return { tipo: "onboarding", retomar: prefs.onboardingPaso > 0 };
 

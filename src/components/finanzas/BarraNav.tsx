@@ -24,6 +24,9 @@ export default function BarraNav() {
     t.exacto ? pathname === t.href
     : pathname.startsWith(t.href) || (t.href === "/finanzas/mas" && EN_MAS.some((p) => pathname.startsWith(p)));
 
+  // El onboarding es a pantalla completa (spec §6.1)
+  if (pathname.startsWith("/finanzas/onboarding")) return null;
+
   return (
     <>
       <nav className="fin-nav" aria-label="Finanzas">

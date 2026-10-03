@@ -1,9 +1,33 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
+// Dos pedidos simultáneos pueden intentar crear la misma fila: el segundo choca con la clave única y relee
+async function crearSiFalta<T>(crear: () => Promise<T>, leer: () => Promise<T | null>): Promise<T> {
+  try {
+    return await crear();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const fila = await leer();
+      if (fila) return fila;
+    }
+    throw e;
+  }
+}
+
 // Devuelve el mes, creándolo vacío si no existe. Clonar el presupuesto es parte de la apertura (spec §6.4), no de acá.
 export async function obtenerMes(anioMes: string) {
-  return prisma.finMes.upsert({ where: { anioMes }, update: {}, create: { anioMes } });
+  return crearSiFalta(
+    () => prisma.finMes.upsert({ where: { anioMes }, update: {}, create: { anioMes } }),
+    () => prisma.finMes.findUnique({ where: { anioMes } })
+  );
+}
+
+// Fila única de preferencias (id "user")
+export async function obtenerPreferencias() {
+  return crearSiFalta(
+    () => prisma.finPreferencias.upsert({ where: { id: "user" }, update: {}, create: { id: "user" } }),
+    () => prisma.finPreferencias.findUnique({ where: { id: "user" } })
+  );
 }
 
 // Último tipo de cambio cargado antes de ese mes, para prellenar (spec §2.2.3)
