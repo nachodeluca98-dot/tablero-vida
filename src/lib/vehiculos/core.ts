@@ -111,7 +111,8 @@ export function kmPorDia(lecturas: Lectura[]): number | null {
 export function kmEstimadoHoy(v: Vehiculo, kmDia: number | null): number | null {
   if (v.kmActual == null) return null;
   if (!kmDia || !v.kmActualFecha) return v.kmActual;
-  const dias = Math.max(0, (Date.now() - +v.kmActualFecha) / DIA);
+  // solo se proyecta por días completos: recién cargado, el km es el real
+  const dias = Math.floor(Math.max(0, (Date.now() - +v.kmActualFecha) / DIA));
   return Math.round(v.kmActual + kmDia * dias);
 }
 

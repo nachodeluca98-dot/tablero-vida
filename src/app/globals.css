@@ -131,3 +131,67 @@ th { color: var(--tx3); font-weight: 600; font-size: 10px; text-transform: upper
   h1 { font-size: 18px !important; }
   .card { padding: 12px; }
 }
+
+/* ─── Módulo Vehículos ─────────────────────────────────────────── */
+.vh-page { padding-bottom: 96px; }
+.vh-grid2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.vh-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vh-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.vh-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--bd); margin-bottom: 16px; overflow-x: auto; }
+.vh-tab { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 14px; color: var(--tx2); white-space: nowrap; font-weight: 500; }
+.vh-tab:hover { background: none; color: var(--tx); }
+.vh-tab.on { color: var(--tx); border-bottom-color: var(--acc); font-weight: 700; }
+.vh-chip { border-radius: 999px; padding: 6px 14px; font-size: 12px; white-space: nowrap; }
+.vh-chip.on { background: var(--acc); border-color: var(--acc); color: #000; font-weight: 700; }
+.vh-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 30;
+  background: var(--acc); color: #000; border: none; border-radius: 999px;
+  padding: 14px 22px; font-size: 15px; font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.vh-fab:hover { background: var(--acc); filter: brightness(1.08); }
+.vh-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 70; animation: vh-fade .15s ease-out; }
+.vh-sheet {
+  position: fixed; z-index: 71; background: var(--bg2); border: 1px solid var(--bd);
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px)); max-height: 88vh; overflow-y: auto;
+  border-radius: 14px; padding: 20px; animation: vh-pop .18s ease-out;
+}
+.vh-toast {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 80;
+  width: min(460px, calc(100vw - 24px)); background: var(--bg3); border: 1px solid var(--sal);
+  border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.6); animation: vh-up .2s ease-out;
+}
+.vh-big { width: 100%; padding: 16px; font-size: 15px; font-weight: 600; border-radius: 10px; text-align: left; display: flex; align-items: center; gap: 12px; }
+.vh-mic {
+  width: 96px; height: 96px; border-radius: 999px; font-size: 38px; border: none;
+  background: var(--acc); color: #000; display: flex; align-items: center; justify-content: center; margin: 0 auto;
+}
+.vh-mic:hover { background: var(--acc); filter: brightness(1.08); }
+.vh-mic.rec { background: var(--red); color: #fff; animation: vh-pulse 1.2s infinite; }
+.vh-progress { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.vh-progress > div { height: 100%; background: var(--acc); border-radius: 3px; transition: width .3s; }
+@keyframes vh-fade { from { opacity: 0 } }
+@keyframes vh-pop { from { opacity: 0; transform: translate(-50%, -46%) } }
+@keyframes vh-up { from { opacity: 0; transform: translate(-50%, 12px) } }
+@keyframes vh-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.6) } 50% { box-shadow: 0 0 0 16px rgba(239,68,68,0) } }
+@keyframes vh-sheet-up { from { transform: translateY(40px); opacity: 0 } }
+
+@media (max-width: 768px) {
+  .vh-grid2 { grid-template-columns: 1fr 1fr; }
+  .vh-cols { grid-template-columns: 1fr; }
+  .vh-sheet {
+    left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%;
+    max-height: 92vh; border-radius: 16px 16px 0 0; border-bottom: none;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); animation: vh-sheet-up .2s ease-out;
+  }
+  .vh-fab { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .vh-toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+.vh-solo-mobile { display: none; }
+@media (max-width: 768px) {
+  .vh-solo-mobile { display: block; }
+  .vh-solo-desktop { display: none !important; }
+}
+.vh-details > summary { list-style: none; cursor: pointer; }
+.vh-details > summary::-webkit-details-marker { display: none; }

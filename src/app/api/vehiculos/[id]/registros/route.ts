@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TIPOS_MANT, actualizarOdometro, fechaDesdeYmd, recalcularOdometro } from "@/lib/vehiculos/core";
+import { feedbackCarga, feedbackMantenimiento } from "@/lib/vehiculos/feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
     await actualizarOdometro(params.id, c.odometro, fecha);
-    return NextResponse.json(c);
+    const feedback = await feedbackCarga(params.id, c.id, c.tanqueLleno, c.odometro != null);
+    return NextResponse.json({ ...c, kind: "carga", feedback });
   }
 
   if (b.kind === "mantenimiento") {
@@ -53,7 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
     await actualizarOdometro(params.id, m.odometro, fecha);
-    return NextResponse.json(m);
+    const feedback = await feedbackMantenimiento(params.id, m.tipo);
+    return NextResponse.json({ ...m, kind: "mantenimiento", feedback });
   }
 
   return NextResponse.json({ error: "kind inválido" }, { status: 400 });
