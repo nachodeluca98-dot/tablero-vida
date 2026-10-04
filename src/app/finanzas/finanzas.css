@@ -135,3 +135,7 @@ button.fin-link { background: none; border: none; }
   .fin-celebrar { animation: fin-aparecer .25s ease-out; }
   @keyframes fin-aparecer { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 }
+
+/* Fila fija arriba (selector de período). En el celular, debajo del botón ☰ del menú de la app */
+.fin-fijo-arriba { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 4px 0 8px; }
+@media (max-width: 768px) { .fin-fijo-arriba { top: 56px; } }

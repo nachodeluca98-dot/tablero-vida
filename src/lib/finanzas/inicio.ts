@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { Montos, sumarMontos } from "./dinero";
 import { anioMesActual, diaReal, diasDelMes, hoyISO, isoDeFechaDB, fechaDB, nombreMes, sumarMeses } from "./fechas";
+import { promedioEsencial } from "./metas";
 import { obtenerMes, obtenerPreferencias, ultimoTipoCambio } from "./meses";
 
 const num = (d: { toNumber(): number } | null | undefined) => (d == null ? null : d.toNumber());
@@ -175,19 +176,6 @@ async function resumenMes(mesId: string, anioMes: string, hoy: string) {
 }
 
 // ─── Metas ──────────────────────────────────────────────────────
-
-// Promedio mensual de gastos esenciales de los últimos 3 meses cerrados (objetivo dinámico del fondo, spec §4)
-async function promedioEsencial(): Promise<Montos | null> {
-  const cerrados = await prisma.finMes.findMany({ where: { estado: "cerrado" }, orderBy: { anioMes: "desc" }, take: 3, select: { id: true } });
-  if (!cerrados.length) return null;
-  const regs = await prisma.finRegistro.findMany({
-    where: { mesId: { in: cerrados.map((m) => m.id) }, tipo: "gasto" },
-    select: { montoArs: true, montoUsd: true, naturaleza: true, categoria: { select: { naturalezaDefault: true } } },
-  });
-  const esenciales = regs.filter((r) => (r.naturaleza ?? r.categoria?.naturalezaDefault) === "esencial");
-  const total = sumarMontos(esenciales.map(montos));
-  return { ars: (total.ars ?? 0) / cerrados.length, usd: (total.usd ?? 0) / cerrados.length };
-}
 
 async function resumenMetas() {
   const metas = await prisma.finMeta.findMany({

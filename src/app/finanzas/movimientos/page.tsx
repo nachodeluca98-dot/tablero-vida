@@ -14,7 +14,7 @@ import type { Movimiento } from "@/lib/finanzas/movimientos";
 
 type Lista = { movimientos: Movimiento[]; hayMas: boolean };
 
-const FILTROS = ["mes", "q", "categoria", "tipo", "medio", "tarjeta", "sinClasificar", "aprox", "compartido"] as const;
+const FILTROS = ["mes", "desde", "hasta", "q", "categoria", "tipo", "medio", "tarjeta", "sinClasificar", "aprox", "compartido"] as const;
 type Filtro = (typeof FILTROS)[number];
 const TIPO_LABEL: Record<string, string> = { gasto: "Gastos", ingreso: "Ingresos", ahorro: "Ahorro" };
 
@@ -97,7 +97,7 @@ function Movimientos() {
   // Filtros en la URL: se pueden compartir y vienen de Inicio/Estadísticas (spec §5.2, §10)
   const filtros = useMemo(() => {
     const f = Object.fromEntries(FILTROS.map((k) => [k, sp.get(k)])) as Record<Filtro, string | null>;
-    if (!sp.has("mes")) f.mes = anioMesActual();
+    if (!sp.has("mes") && !sp.has("desde") && !sp.has("hasta")) f.mes = anioMesActual();
     return f;
   }, [sp]);
 
@@ -202,7 +202,7 @@ function Movimientos() {
 
   const mes = filtros.mes === "todo" ? null : filtros.mes;
   const cat = datos?.categorias.find((c) => c.id === filtros.categoria);
-  const hayFiltros = FILTROS.some((k) => k !== "mes" && filtros[k]);
+  const hayFiltros = FILTROS.some((k) => k !== "mes" && k !== "desde" && k !== "hasta" && filtros[k]);
   const sinClasificarVisibles = visibles.filter((m) => !m.categoriaId).length;
 
   return (
@@ -219,7 +219,14 @@ function Movimientos() {
         style={{ width: "100%" }}
       />
 
-      {/* Período */}
+      {/* Período: un rango que viene de Estadísticas, o el selector de mes */}
+      {(filtros.desde || filtros.hasta) ? (
+        <div style={{ marginTop: 10 }}>
+          <button type="button" className="fin-chip activo" onClick={() => router.replace(`/finanzas/movimientos?mes=${filtros.hasta ?? anioMesActual()}`, { scroll: false })}>
+            {filtros.desde ? `${nombreMes(filtros.desde)} ${filtros.desde.slice(0, 4)}` : "…"} – {filtros.hasta ? `${nombreMes(filtros.hasta)} ${filtros.hasta.slice(0, 4)}` : "hoy"} ✕
+          </button>
+        </div>
+      ) : (
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10 }}>
         <button type="button" className="fin-icono-btn" aria-label="Mes anterior" onClick={() => setFiltro("mes", sumarMeses(mes ?? anioMesActual(), -1))}>‹</button>
         <button type="button" className={`fin-chip ${mes ? "activo" : ""}`} onClick={() => setFiltro("mes", mes ? null : anioMesActual())}>
@@ -227,6 +234,7 @@ function Movimientos() {
         </button>
         <button type="button" className="fin-icono-btn" aria-label="Mes siguiente" onClick={() => setFiltro("mes", sumarMeses(mes ?? anioMesActual(), 1))}>›</button>
       </div>
+      )}
 
       {/* Filtros como chips horizontales */}
       <div className="fin-chips" style={{ flexWrap: "nowrap", overflowX: "auto", padding: "8px 0", scrollbarWidth: "none" }}>
