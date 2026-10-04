@@ -8,6 +8,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(
     await listarMovimientos({
       mes: p.get("mes"),
+      desde: p.get("desde"),
+      hasta: p.get("hasta"),
       q: p.get("q"),
       categoria: p.get("categoria"),
       tipo: p.get("tipo"),

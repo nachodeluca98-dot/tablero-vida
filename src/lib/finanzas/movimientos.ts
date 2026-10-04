@@ -58,6 +58,8 @@ export type Movimiento = ReturnType<typeof aMovimiento>;
 
 export type Filtros = {
   mes?: string | null; // YYYY-MM (mes de imputación) o null = todo
+  desde?: string | null; // rango de meses de imputación (Estadísticas), inclusive
+  hasta?: string | null;
   q?: string | null;
   categoria?: string | null;
   tipo?: string | null;
@@ -70,7 +72,10 @@ export type Filtros = {
 
 export async function listarMovimientos(f: Filtros) {
   const where: Prisma.FinRegistroWhereInput = {};
-  if (f.mes && /^\d{4}-\d{2}$/.test(f.mes)) where.mes = { anioMes: f.mes };
+  const okMes = (v?: string | null) => !!v && /^\d{4}-\d{2}$/.test(v);
+  if (okMes(f.desde) || okMes(f.hasta)) {
+    where.mes = { anioMes: { ...(okMes(f.desde) ? { gte: f.desde! } : {}), ...(okMes(f.hasta) ? { lte: f.hasta! } : {}) } };
+  } else if (okMes(f.mes)) where.mes = { anioMes: f.mes! };
   if (f.categoria) where.categoriaId = f.categoria;
   if (f.sinClasificar) where.categoriaId = null;
   if (f.tipo && ["gasto", "ingreso", "ahorro"].includes(f.tipo)) where.tipo = f.tipo as TipoMov;
