@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { escapeHtml } from "@/lib/telegram";
-import { notificar } from "./canal";
+import { notificar } from "@/lib/compartido/canal";
 import { describirVencimiento, resumenVehiculo, vehiculosActivos } from "./core";
 
 const DIA = 86400000;

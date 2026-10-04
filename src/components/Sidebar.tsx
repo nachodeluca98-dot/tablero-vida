@@ -13,6 +13,7 @@ const NAV = [
   { href: "/habitos", label: "Hábitos", dot: "var(--sal)" },
   { href: "/cronograma", label: "Cronograma", dot: "var(--fit)" },
   { href: "/vehiculos", label: "Vehículos", dot: "var(--cre)" },
+  { href: "/finanzas", label: "Finanzas", dot: "var(--sal)" },
   { href: "/settings", label: "Settings", dot: "var(--tx3)" },
 ];
 
@@ -35,7 +36,7 @@ export default function Sidebar() {
           Navegación
         </div>
         {NAV.map((n) => {
-          const active = pathname === n.href;
+          const active = pathname === n.href || (n.href !== "/" && pathname.startsWith(n.href + "/"));
           return (
             <Link key={n.href} href={n.href}
               style={{

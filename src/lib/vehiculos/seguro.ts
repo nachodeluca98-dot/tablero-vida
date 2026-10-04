@@ -1,7 +1,7 @@
 // El seguro es un gasto mensual: cada mes se registra la cuota vigente como un Mantenimiento tipo "seguro"
 import { prisma } from "@/lib/prisma";
 import { escapeHtml } from "@/lib/telegram";
-import { notificar } from "./canal";
+import { notificar } from "@/lib/compartido/canal";
 import { fmtPesos, hoyYmd } from "./core";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];

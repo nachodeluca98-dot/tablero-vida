@@ -8,7 +8,7 @@ import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { askCoach } from "@/lib/coach";
 import { PREGUNTAS } from "@/lib/reflexion";
 import { procesarMensajeVehiculo, enviarEstado, enviarVehiculos, enviarUltimo, manejarCallbackVehiculo } from "@/lib/vehiculos/bot";
-import { transcribirAudioTelegram, transcripcionDisponible } from "@/lib/vehiculos/transcripcion";
+import { transcribirAudioTelegram, transcripcionDisponible } from "@/lib/compartido/transcripcion";
 
 async function handleReflexion(text: string, chatId: string): Promise<boolean> {
   const fecha = today();

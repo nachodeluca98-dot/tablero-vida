@@ -40,10 +40,13 @@ export function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Botón inline: callback_data (lo procesa el webhook) o url (abre un link, p. ej. la app en una pantalla)
+export type BotonTelegram = { text: string; callback_data: string } | { text: string; url: string };
+
 // Manda un mensaje con teclado inline (botones tappeables)
 export async function sendTelegramWithButtons(
   text: string,
-  buttons: Array<Array<{ text: string; callback_data: string }>>,
+  buttons: Array<Array<BotonTelegram>>,
   chatId?: string
 ) {
   if (!TOKEN) return { ok: false };
