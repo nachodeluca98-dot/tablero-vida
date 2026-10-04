@@ -619,3 +619,14 @@ model FinPreferencias {
 
   @@map("fin_preferencias")
 }
+
+// Avisos por Telegram ya enviados (spec §8): evita repetir y permite "una vez por umbral por mes" y el recordatorio a las 24 h
+model FinAviso {
+  id        String   @id @default(cuid())
+  clave     String   @unique // ej. "cat80:fincat_super:2026-10", "rev:2026-10-15"
+  tipo      String
+  enviadoAt DateTime @default(now()) @map("enviado_at")
+
+  @@index([tipo, enviadoAt])
+  @@map("fin_avisos")
+}

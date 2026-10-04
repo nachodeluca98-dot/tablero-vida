@@ -9,6 +9,7 @@ import { pilarFromKey, pilarKey } from "@/lib/pilares";
 import { renewWatchIfNeeded } from "@/lib/googleWatch";
 import { revisarRecordatoriosVehiculos } from "@/lib/vehiculos/recordatorios";
 import { registrarSegurosDelMes } from "@/lib/vehiculos/seguro";
+import { enviarAvisosFinanzas } from "@/lib/finanzas/avisos";
 
 export const dynamic = "force-dynamic";
 
@@ -112,5 +113,8 @@ export async function GET(req: NextRequest) {
     vehiculos = { ...(await revisarRecordatoriosVehiculos()), ...(await registrarSegurosDelMes()) };
   } catch (e) { vehiculos = { error: String(e) }; }
 
-  return NextResponse.json({ ok: true, telegram: tg, push, watch, vehiculos });
+  let finanzas: any = null;
+  try { finanzas = await enviarAvisosFinanzas(); } catch (e) { finanzas = { error: String(e) }; }
+
+  return NextResponse.json({ ok: true, telegram: tg, push, watch, vehiculos, finanzas });
 }

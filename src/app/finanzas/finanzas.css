@@ -1,6 +1,8 @@
 /* Módulo Finanzas: mobile first, acciones abajo, objetivos táctiles ≥ 44px (spec §2.2, §13) */
 
 .fin-page { max-width: 640px; margin: 0 auto; padding-bottom: 96px; font-size: 14px; }
+/* En filas flexibles los inputs tienen que poder achicarse: si no, la página se ensancha en el celular */
+.fin-page input, .fin-page select { min-width: 0; }
 .fin-page h1 { font-size: 20px; font-weight: 700; margin: 0 0 16px; }
 .fin-seccion { margin-top: 20px; }
 .fin-seccion-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
