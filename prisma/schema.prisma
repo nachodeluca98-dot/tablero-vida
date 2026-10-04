@@ -393,6 +393,8 @@ model FinPresupuestoItem {
   clones               FinPresupuestoItem[] @relation("ClonItem")
   planCuotasId         String?              @map("plan_cuotas_id")
   planCuotas           FinPlanCuotas?       @relation(fields: [planCuotasId], references: [id], onDelete: Cascade)
+  metaId               String?              @map("meta_id") // ítem de ahorro: a qué meta va (apertura, spec §6.4)
+  meta                 FinMeta?             @relation(fields: [metaId], references: [id], onDelete: SetNull)
   activo               Boolean              @default(true) // false = quitado este mes
   registros            FinRegistro[]
   createdAt            DateTime             @default(now()) @map("created_at")
@@ -488,19 +490,20 @@ model FinPlanCuotas {
 
 // Fondo de emergencia: objetivo = mesesCobertura × promedio de gastos esenciales de los últimos 3 meses cerrados.
 model FinMeta {
-  id             String          @id @default(cuid())
+  id             String               @id @default(cuid())
   nombre         String
-  tipo           FinTipoMeta     @default(meta)
+  tipo           FinTipoMeta          @default(meta)
   icono          String?
-  montoObjetivo  Decimal?        @map("monto_objetivo") @db.Decimal(14, 2)
+  montoObjetivo  Decimal?             @map("monto_objetivo") @db.Decimal(14, 2)
   moneda         FinMoneda?
-  mesesCobertura Int?            @map("meses_cobertura")
-  fechaObjetivo  DateTime?       @map("fecha_objetivo") @db.Date
-  activa         Boolean         @default(true)
+  mesesCobertura Int?                 @map("meses_cobertura")
+  fechaObjetivo  DateTime?            @map("fecha_objetivo") @db.Date
+  activa         Boolean              @default(true)
   registros      FinRegistro[]
   aportes        FinAporteMeta[]
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  items          FinPresupuestoItem[]
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
   @@map("fin_metas")
 }

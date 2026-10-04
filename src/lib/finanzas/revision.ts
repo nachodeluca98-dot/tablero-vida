@@ -39,7 +39,8 @@ export async function actualizarRevision(id: string, c: { paso?: number; complet
   const r = await prisma.finRevision.findUnique({ where: { id } });
   if (!r) throw new Error("No encontré la revisión");
   const data: Prisma.FinRevisionUpdateInput = {};
-  if (c.paso !== undefined) data.pasoActual = Math.max(1, Math.min(3, Math.round(c.paso)));
+  // Quincenal: pasos 1-3. Cierre + apertura: 1-5 cierre, 6-10 apertura
+  if (c.paso !== undefined) data.pasoActual = Math.max(1, Math.min(r.tipo === "cierre" ? 10 : 3, Math.round(c.paso)));
   if (c.modo) data.modo = c.modo;
   if (c.completar) {
     data.estado = "completa";

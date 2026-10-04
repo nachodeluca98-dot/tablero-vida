@@ -278,7 +278,7 @@ export async function clonarDesdeAnterior(anioMes: string, ajusteInflacionPct = 
           mesId: mes.id, categoriaId: i.categoriaId, concepto: i.concepto, incluye: i.incluye,
           ...montosDe(monto, i.monedaOriginal as Moneda, i.frecuencia as Frecuencia, tc),
           frecuencia: i.frecuencia, recurrente: true, fijoVariable: i.fijoVariable, naturaleza: i.naturaleza,
-          diaVencimiento: i.diaVencimiento, medioPago: i.medioPago, tarjetaId: i.tarjetaId,
+          diaVencimiento: i.diaVencimiento, medioPago: i.medioPago, tarjetaId: i.tarjetaId, metaId: i.metaId,
           origen: "clon", itemOrigenId: i.id,
         },
       });
