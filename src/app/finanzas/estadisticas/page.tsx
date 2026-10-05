@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { BarraPartida, BarrasH, CATEGORICO, Columnas, compacto, ConTabla, Linea, mesCorto, SERIE, TablaDatos } from "@/components/finanzas/Graficos";
 import Montos from "@/components/finanzas/Montos";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import ResumenIa from "@/components/finanzas/ResumenIa";
 import { fmtArs, fmtPct, fmtUsd, type Montos as M } from "@/lib/finanzas/dinero";
 import type { DatosEstadisticas } from "@/lib/finanzas/estadisticas";
@@ -155,6 +156,7 @@ function Estadisticas() {
           </section>
 
           {/* 3. Gastos por categoría */}
+          {d.categorias.length > 0 && <MarcaPrimeraVez id="estadisticas" />}
           <Widget titulo="Gastos por categoría">
             {d.categorias.length === 0 ? (
               <Vacio titulo="Todavía no hay gastos en este período" texto="Cuando cargues gastos vas a ver en qué se va la plata, de mayor a menor." accion={<Link href="/finanzas/cargar?modo=voz" className="fin-btn secundario">🎙 Cargar un gasto</Link>} />
