@@ -446,6 +446,7 @@ model FinRegistro {
   @@index([mesId, tipo])
   @@index([fecha])
   @@index([categoriaId])
+  @@index([origenRefId])
   @@index([origen, origenRefId])
   @@map("fin_registros")
 }
@@ -608,14 +609,15 @@ model FinGuiaEstado {
 
 // Una sola fila (id "user"), igual que Settings. La tarjeta default se marca en FinTarjeta.esDefault.
 model FinPreferencias {
-  id                     String   @id @default("user")
-  diasRevision           Int[]    @default([15, 0]) @map("dias_revision") // 0 = último día del mes
-  ajusteInflacionDefault Decimal? @map("ajuste_inflacion_default") @db.Decimal(6, 2)
-  mostrarGuias           Boolean  @default(true) @map("mostrar_guias")
-  avisosTelegram         Json     @default("{}") @map("avisos_telegram") // { tipoAviso: boolean }; ausente = activo
-  onboardingPaso         Int      @default(0) @map("onboarding_paso") // para retomar el onboarding; -1 = completo
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
+  id                     String    @id @default("user")
+  diasRevision           Int[]     @default([15, 0]) @map("dias_revision") // 0 = último día del mes
+  ajusteInflacionDefault Decimal?  @map("ajuste_inflacion_default") @db.Decimal(6, 2)
+  mostrarGuias           Boolean   @default(true) @map("mostrar_guias")
+  avisosTelegram         Json      @default("{}") @map("avisos_telegram") // { tipoAviso: boolean }; ausente = activo
+  onboardingPaso         Int       @default(0) @map("onboarding_paso") // para retomar el onboarding; -1 = completo
+  vehiculosImportadoAt   DateTime? @map("vehiculos_importado_at") // importación inicial de gastos de Vehículos (spec §12)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   @@map("fin_preferencias")
 }

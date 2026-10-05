@@ -5,6 +5,7 @@ import { Montos, sumarMontos } from "./dinero";
 import { anioMesActual, diaReal, diasDelMes, hoyISO, isoDeFechaDB, fechaDB, nombreMes, sumarMeses } from "./fechas";
 import { promedioEsencial } from "./metas";
 import { obtenerMes, obtenerPreferencias, ultimoTipoCambio } from "./meses";
+import { importarGastosVehiculos } from "./vehiculos";
 
 const num = (d: { toNumber(): number } | null | undefined) => (d == null ? null : d.toNumber());
 
@@ -221,6 +222,8 @@ export async function datosInicio() {
   const hoy = hoyISO();
   const anioMes = anioMesActual();
   const mes = await obtenerMes(anioMes);
+  // Primera vez con el módulo listo: trae los gastos ya cargados en Vehículos (spec §12)
+  await importarGastosVehiculos();
 
   const racha = await rachaRevisiones();
   const [proximoPaso, resumen, metas, ultimos] = await Promise.all([

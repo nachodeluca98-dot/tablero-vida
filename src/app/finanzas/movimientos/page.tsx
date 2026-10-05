@@ -68,6 +68,7 @@ function FilaMovimiento({ m, onAbrir, onEliminar }: { m: Movimiento; onAbrir: ()
             {m.descripcion || m.categoria?.nombre || "Sin descripción"}
             {m.esAproximado && <span className="fin-marca" title="Aproximado">≈</span>}
             {m.compartido && <span className="fin-marca" title="Compartido">👥</span>}
+            {m.origen === "modulo_vehiculos" && <span className="fin-marca" title="Desde Vehículos">🚗</span>}
             {m.cuotaNumero != null && <span className="fin-marca">{m.cuotaNumero}/{m.cuotasTotal}</span>}
           </div>
           <div style={{ fontSize: 12, color: "var(--tx3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TIPOS_MANT, actualizarOdometro, fechaDesdeYmd, recalcularOdometro } from "@/lib/vehiculos/core";
 import { feedbackCarga, feedbackMantenimiento } from "@/lib/vehiculos/feedback";
+import { quitarCarga, quitarMantenimiento, sincronizarCarga, sincronizarMantenimiento } from "@/lib/finanzas/vehiculos";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
     await actualizarOdometro(params.id, c.odometro, fecha);
+    await sincronizarCarga(c.id);
     const feedback = await feedbackCarga(params.id, c.id, c.tanqueLleno, c.odometro != null);
     return NextResponse.json({ ...c, kind: "carga", feedback });
   }
@@ -55,6 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
     await actualizarOdometro(params.id, m.odometro, fecha);
+    await sincronizarMantenimiento(m.id);
     const feedback = await feedbackMantenimiento(params.id, m.tipo);
     return NextResponse.json({ ...m, kind: "mantenimiento", feedback });
   }
@@ -66,8 +69,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const kind = req.nextUrl.searchParams.get("kind");
   const rid = req.nextUrl.searchParams.get("rid");
   if (!rid) return NextResponse.json({ error: "Falta rid" }, { status: 400 });
-  if (kind === "carga") await prisma.cargaCombustible.deleteMany({ where: { id: rid, vehiculoId: params.id } });
-  else if (kind === "mantenimiento") await prisma.mantenimiento.deleteMany({ where: { id: rid, vehiculoId: params.id } });
+  if (kind === "carga") {
+    const { count } = await prisma.cargaCombustible.deleteMany({ where: { id: rid, vehiculoId: params.id } });
+    if (count) await quitarCarga(rid);
+  } else if (kind === "mantenimiento") {
+    const { count } = await prisma.mantenimiento.deleteMany({ where: { id: rid, vehiculoId: params.id } });
+    if (count) await quitarMantenimiento(rid);
+  }
   else return NextResponse.json({ error: "kind inválido" }, { status: 400 });
   await recalcularOdometro(params.id);
   return NextResponse.json({ ok: true });
