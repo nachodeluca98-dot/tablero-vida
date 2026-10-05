@@ -11,6 +11,10 @@ const fechaCorta = (iso: string) =>
 
 // ─── Tu próximo paso ────────────────────────────────────────────
 
+// keepalive: el pedido sigue aunque se navegue a otra pantalla (acción de una guía)
+const postGuia = (body: object) =>
+  fetch("/api/finanzas/guias", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
+
 function CargarTipoCambio({ paso, onGuardado }: { paso: Extract<ProximoPaso, { tipo: "tipo_cambio" }>; onGuardado: () => void }) {
   const [tc, setTc] = useState(paso.sugerido ? String(paso.sugerido).replace(".", ",") : "");
   const [fuente, setFuente] = useState(paso.fuenteSugerida || "");
@@ -50,7 +54,7 @@ function CargarTipoCambio({ paso, onGuardado }: { paso: Extract<ProximoPaso, { t
   );
 }
 
-function TarjetaProximoPaso({ paso, anioMes, onCambio }: { paso: ProximoPaso; anioMes: string; onCambio: (aviso: string) => void }) {
+function TarjetaProximoPaso({ paso, anioMes, onCambio, onRecargar }: { paso: ProximoPaso; anioMes: string; onCambio: (aviso: string) => void; onRecargar: () => void }) {
   const mesNombre = nombreMes(anioMes);
   let etiqueta = "Tu próximo paso";
   let titulo: string;
@@ -65,10 +69,11 @@ function TarjetaProximoPaso({ paso, anioMes, onCambio }: { paso: ProximoPaso; an
       break;
     case "revision": {
       const cierre = paso.revision === "cierre";
-      titulo = cierre ? (paso.anioMes === anioMes ? "Cerremos el mes" : `Cerremos ${nombreMes(paso.anioMes)}`) : "Es día de revisión";
+      titulo = cierre ? (paso.anioMes === anioMes ? "Cerremos el mes" : `Cerremos ${nombreMes(paso.anioMes)}`) : paso.primera ? "Tu primera revisión" : "Es día de revisión";
       texto = cierre
         ? "Confirmás fijos y saldos, y dejamos listo el mes que viene. Unos 7 minutos."
         : "Tildás los fijos, dictás los variables y ves cómo vas. Menos de 5 minutos.";
+      if (paso.primera) etiqueta = "Guía";
       accion = <Link href={paso.ruta} className="fin-btn primario">{paso.retomar ? "Retomar" : "Empezar"}</Link>;
       break;
     }
@@ -84,6 +89,28 @@ function TarjetaProximoPaso({ paso, anioMes, onCambio }: { paso: ProximoPaso; an
       texto = "Un toque por movimiento y listo.";
       accion = <Link href="/finanzas/clasificar" className="fin-btn primario">Clasificar ({paso.cantidad})</Link>;
       break;
+    case "guia": {
+      const g = paso.guia;
+      etiqueta = "Guía";
+      titulo = g.titulo;
+      texto = g.texto;
+      const responder = async (respuesta: "completar" | "ahora_no" | "no_mostrar") => {
+        await postGuia({ guia: g.id, respuesta });
+        onRecargar();
+      };
+      accion = (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          {g.accion ? (
+            <Link href={g.accion.ruta} className="fin-btn primario" onClick={() => { postGuia({ guia: g.id, respuesta: "completar" }); }}>{g.accion.etiqueta}</Link>
+          ) : (
+            <button type="button" className="fin-btn primario" onClick={() => responder("completar")}>{g.id === "racha" ? "👏 ¡Vamos!" : "Entendido"}</button>
+          )}
+          {g.accion && <button type="button" className="fin-link fin-guia-btn" onClick={() => responder("ahora_no")}>Ahora no</button>}
+          {g.id !== "racha" && <button type="button" className="fin-link fin-guia-btn" onClick={() => responder("no_mostrar")}>No mostrar más</button>}
+        </div>
+      );
+      break;
+    }
     case "al_dia":
       etiqueta = "Todo al día";
       titulo = "Vas bárbaro 🙌";
@@ -99,6 +126,36 @@ function TarjetaProximoPaso({ paso, anioMes, onCambio }: { paso: ProximoPaso; an
       {accion}
     </section>
   );
+}
+
+// ─── Hitos y racha (spec §7.3) ──────────────────────────────────
+
+function Hito({ hito, onListo }: { hito: NonNullable<DatosInicio["hito"]>; onListo: () => void }) {
+  const [cerrando, setCerrando] = useState(false);
+  return (
+    <section className="fin-hito fin-celebrar" role="status">
+      <span className="fin-hito-icono" aria-hidden>{hito.icono}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <strong style={{ display: "block" }}>{hito.titulo}</strong>
+        <span style={{ color: "var(--tx2)", fontSize: 13 }}>{hito.texto}</span>
+      </div>
+      <button
+        type="button"
+        className="fin-icono-btn"
+        aria-label="Listo"
+        disabled={cerrando}
+        onClick={async () => { setCerrando(true); await postGuia({ hito: hito.id, anteriores: hito.anteriores }); onListo(); }}
+      >
+        👏
+      </button>
+    </section>
+  );
+}
+
+// Discreta: solo aparece desde 2 seguidas, y si se corta simplemente no se muestra (no es un fracaso)
+function Racha({ n }: { n: number }) {
+  if (n < 2) return null;
+  return <div className="fin-racha">🔥 {n} revisiones seguidas</div>;
 }
 
 // ─── Resumen del mes ────────────────────────────────────────────
@@ -329,7 +386,9 @@ export default function InicioFinanzas() {
   return (
     <>
       <h1>Finanzas</h1>
-      <TarjetaProximoPaso paso={d.proximoPaso} anioMes={d.mes.anioMes} onCambio={(a) => { setAviso(a); cargar(); }} />
+      {d.hito && <Hito hito={d.hito} onListo={cargar} />}
+      <TarjetaProximoPaso paso={d.proximoPaso} anioMes={d.mes.anioMes} onCambio={(a) => { setAviso(a); cargar(); }} onRecargar={cargar} />
+      <Racha n={d.racha} />
       <ResumenMes d={d} />
       <Categorias d={d} />
       <Metas d={d} />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { Columnas, compacto, mesCorto, SERIE } from "@/components/finanzas/Graficos";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import Teclado, { formatearTexto, montoDeTexto } from "@/components/finanzas/Teclado";
 import { fmtArs, fmtPct, fmtUsd, type Moneda } from "@/lib/finanzas/dinero";
 import { nombreMes } from "@/lib/finanzas/fechas";
@@ -240,7 +241,9 @@ function Metas() {
             <div style={{ marginTop: 10 }}><button type="button" className="fin-btn primario" onClick={() => setNueva(true)}>🛟 Crear mi fondo de emergencia</button></div>
           </div>
         ) : (
-          metas.map((m) => (
+          <>
+          <MarcaPrimeraVez id="metas" />
+          {metas.map((m) => (
             <TarjetaMeta
               key={m.id}
               m={m}
@@ -249,7 +252,8 @@ function Metas() {
               onAportar={() => setAporte(m)}
               onArchivar={async () => { await api(`/api/finanzas/metas/${m.id}`, "PATCH", { activa: false }).catch(() => {}); setAviso(`${m.nombre} archivada`); cargar(); }}
             />
-          ))
+          ))}
+          </>
         )}
       </div>
       <Link href="/finanzas/estadisticas" className="fin-link">Ver aportes en Estadísticas ›</Link>

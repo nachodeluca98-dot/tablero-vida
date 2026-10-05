@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import GrillaCategorias from "@/components/finanzas/GrillaCategorias";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import type { DatosCarga } from "@/lib/finanzas/carga";
 import { fmtArs, fmtUsd } from "@/lib/finanzas/dinero";
 import type { Movimiento } from "@/lib/finanzas/movimientos";
@@ -94,6 +95,7 @@ export default function Clasificar() {
         {cat && <div style={{ fontSize: 12, color: "var(--amb-t)", marginTop: 8 }}>Sugerida: {cat.icono} {cat.nombre}</div>}
       </div>
 
+      <MarcaPrimeraVez id="clasificar" />
       <GrillaCategorias categorias={datos.categorias} tipo={actual.tipo} sugerida={actual.sugerida} onElegir={asignar} />
 
       <div className="fin-barra-accion">

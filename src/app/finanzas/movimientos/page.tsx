@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DetalleMovimiento from "@/components/finanzas/DetalleMovimiento";
 import GrillaCategorias from "@/components/finanzas/GrillaCategorias";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import Montos from "@/components/finanzas/Montos";
 import { MEDIOS_PAGO, MEDIO_LABEL } from "@/lib/finanzas/borrador";
 import type { DatosCarga } from "@/lib/finanzas/carga";
@@ -306,6 +307,7 @@ function Movimientos() {
         )
       )}
 
+      {porDia.length > 0 && <div style={{ marginTop: 14 }}><MarcaPrimeraVez id="movimientos" /></div>}
       {porDia.map(([dia, ms]) => {
         const gastoDia = sumarMontos(ms.filter((m) => m.tipo === "gasto").map((m) => ({ ars: m.montoArs, usd: m.montoUsd })));
         return (

@@ -1,5 +1,6 @@
 // Datos de la pantalla Inicio (spec §5.2): "Tu próximo paso" + cómo voy en el mes.
 import { prisma } from "@/lib/prisma";
+import { guiaSugerida, hitoPendiente, rachaRevisiones, type GuiaVisible } from "./adopcion";
 import { Montos, sumarMontos } from "./dinero";
 import { anioMesActual, diaReal, diasDelMes, hoyISO, isoDeFechaDB, fechaDB, nombreMes, sumarMeses } from "./fechas";
 import { promedioEsencial } from "./metas";
@@ -9,9 +10,10 @@ const num = (d: { toNumber(): number } | null | undefined) => (d == null ? null 
 
 export type ProximoPaso =
   | { tipo: "onboarding"; retomar: boolean }
-  | { tipo: "revision"; revision: "quincenal" | "cierre"; anioMes: string; retomar: boolean; ruta: string }
+  | { tipo: "revision"; revision: "quincenal" | "cierre"; anioMes: string; retomar: boolean; ruta: string; primera: boolean }
   | { tipo: "tipo_cambio"; anioMes: string; sugerido: number | null; fuenteSugerida: string | null }
   | { tipo: "clasificar"; cantidad: number }
+  | { tipo: "guia"; guia: GuiaVisible }
   | { tipo: "al_dia"; proximaRevision: string | null };
 
 // ─── Revisiones ─────────────────────────────────────────────────
@@ -72,13 +74,17 @@ export function rutaRevision(revision: "quincenal" | "cierre", anioMes: string) 
 
 // ─── Próximo paso ───────────────────────────────────────────────
 
-async function calcularProximoPaso(anioMes: string, hoy: string): Promise<ProximoPaso> {
+async function calcularProximoPaso(anioMes: string, hoy: string, racha: number): Promise<ProximoPaso> {
   const prefs = await obtenerPreferencias();
 
   if (prefs.onboardingPaso !== -1) return { tipo: "onboarding", retomar: prefs.onboardingPaso > 0 };
 
   const rev = await revisionDebida(anioMes, hoy, prefs.diasRevision);
-  if (rev) return { tipo: "revision", ...rev, ruta: rutaRevision(rev.revision, rev.anioMes) };
+  if (rev) {
+    // "Tu primera revisión" (spec §7.2): la tarjeta de revisión hace de guía la primera vez
+    const primera = !rev.retomar && (await prisma.finRevision.count({ where: { estado: "completa", tipo: { not: "apertura" } } })) === 0;
+    return { tipo: "revision", ...rev, ruta: rutaRevision(rev.revision, rev.anioMes), primera };
+  }
 
   const mes = await obtenerMes(anioMes);
   if (mes.tipoCambio == null) {
@@ -89,7 +95,9 @@ async function calcularProximoPaso(anioMes: string, hoy: string): Promise<Proxim
   const sinClasificar = await prisma.finRegistro.count({ where: { categoriaId: null } });
   if (sinClasificar > 0) return { tipo: "clasificar", cantidad: sinClasificar };
 
-  // 4. Guía contextual sugerida: la agrega el motor de guías (spec §15, paso 12)
+  // 4. Guía contextual sugerida (spec §7.2)
+  const guia = await guiaSugerida(racha);
+  if (guia) return { tipo: "guia", guia };
 
   return { tipo: "al_dia", proximaRevision: proximaRevision(anioMes, hoy, prefs.diasRevision) };
 }
@@ -214,8 +222,9 @@ export async function datosInicio() {
   const anioMes = anioMesActual();
   const mes = await obtenerMes(anioMes);
 
+  const racha = await rachaRevisiones();
   const [proximoPaso, resumen, metas, ultimos] = await Promise.all([
-    calcularProximoPaso(anioMes, hoy),
+    calcularProximoPaso(anioMes, hoy, racha),
     resumenMes(mes.id, anioMes, hoy),
     resumenMetas(),
     prisma.finRegistro.findMany({
@@ -229,8 +238,12 @@ export async function datosInicio() {
     }),
   ]);
 
+  const hito = await hitoPendiente(metas);
+
   return {
     hoy,
+    racha,
+    hito,
     mes: { anioMes, nombre: nombreMes(anioMes), tipoCambio: num(mes.tipoCambio), fuenteTc: mes.fuenteTc, estado: mes.estado },
     proximoPaso,
     resumen,

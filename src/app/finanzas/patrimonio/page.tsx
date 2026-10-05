@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { compacto, ConTabla, Linea, mesCorto, TablaDatos } from "@/components/finanzas/Graficos";
 import Montos from "@/components/finanzas/Montos";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import { formatearTexto, montoDeTexto, textoDeMonto } from "@/components/finanzas/Teclado";
 import { fmtArs, fmtUsd, type Moneda } from "@/lib/finanzas/dinero";
 import { nombreMes } from "@/lib/finanzas/fechas";
@@ -109,6 +110,7 @@ function Patrimonio() {
           <h2>Cuentas</h2>
           {!agregando && <button type="button" className="fin-link" onClick={() => setAgregando(true)}>+ Agregar</button>}
         </div>
+        {d.cuentas.some((c) => c.saldo != null) && <MarcaPrimeraVez id="patrimonio" />}
         {d.cuentas.length > 0 && (
           <div className="fin-lista">
             {d.cuentas.map((c) => (

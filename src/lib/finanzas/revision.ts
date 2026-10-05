@@ -2,6 +2,7 @@
 // La revisión se guarda en fin_revisiones para retomarla donde quedó y medir adopción.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { rachaRevisiones } from "./adopcion";
 import { equivalentes, type Moneda } from "./dinero";
 import { anioMesActual, diasDelMes, diaReal, fechaDB, hoyISO, sumarMeses } from "./fechas";
 import { obtenerMes, obtenerPreferencias, tcVigente } from "./meses";
@@ -146,18 +147,7 @@ export async function datosRevision(id: string) {
     if (d) { proxima = `${am}-${String(d).padStart(2, "0")}`; break; }
   }
 
-  // Racha: revisiones seguidas completas (las exprés cuentan, spec §7.3)
-  const ultimas = await prisma.finRevision.findMany({
-    where: { estado: { in: ["completa", "salteada"] }, tipo: { not: "apertura" } },
-    orderBy: { fecha: "desc" },
-    take: 24,
-    select: { estado: true },
-  });
-  let racha = 0;
-  for (const u of ultimas) {
-    if (u.estado !== "completa") break;
-    racha++;
-  }
+  const racha = await rachaRevisiones();
 
   return {
     revision: { id: r.id, tipo: r.tipo, modo: r.modo, estado: r.estado, paso: r.pasoActual, anioMes },

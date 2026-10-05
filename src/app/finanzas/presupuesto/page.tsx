@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import GrillaCategorias from "@/components/finanzas/GrillaCategorias";
+import MarcaPrimeraVez from "@/components/finanzas/MarcaPrimeraVez";
 import Montos from "@/components/finanzas/Montos";
 import { formatearTexto, montoDeTexto, textoDeMonto } from "@/components/finanzas/Teclado";
 import type { DatosCarga } from "@/lib/finanzas/carga";
@@ -532,6 +533,7 @@ function Presupuesto() {
             </div>
           )}
 
+          {d.grupos.length > 0 && <MarcaPrimeraVez id="presupuesto" />}
           {SECCIONES.map(([tipo, titulo]) => {
             const gs = d.grupos.filter((g) => g.tipo === tipo);
             if (!gs.length) return null;
