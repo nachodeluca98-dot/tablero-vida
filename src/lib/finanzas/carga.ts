@@ -168,7 +168,9 @@ async function itemVinculable(b: Borrador, mesId: string) {
   const d = norm(b.descripcion);
   return (
     items.find((i) => d && (d.includes(norm(i.concepto)) || norm(i.concepto).includes(d))) ??
-    (items.length === 1 ? items[0] : null)
+    // Sin coincidencia de nombre, solo se vincula al único ítem si es variable: un gasto cualquiera de la
+    // categoría no debe dar por pagado un fijo (ej.: un service no es la cuota del seguro)
+    (items.length === 1 && items[0].fijoVariable !== "fijo" ? items[0] : null)
   );
 }
 
@@ -210,7 +212,7 @@ export async function marcarDuplicados(borradores: Borrador[]): Promise<Borrador
 
 // ─── Guardar ────────────────────────────────────────────────────
 
-export type Origen = "app_voz" | "app_rapida" | "app_formulario";
+export type Origen = "app_voz" | "app_rapida" | "app_formulario" | "modulo_vehiculos";
 
 export type ResultadoGuardado = { ids: string[]; planes: { registroId: string; texto: string }[] };
 

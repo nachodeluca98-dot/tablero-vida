@@ -143,6 +143,11 @@ export default function DetalleMovimiento({
             </div>
           </div>
           <div className="fin-fila"><span style={{ flex: 1 }}>Cargado por</span><span style={{ color: "var(--tx2)" }}>{ORIGEN[movimiento.origen] ?? movimiento.origen}</span></div>
+          {movimiento.origen === "modulo_vehiculos" && (
+            <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0, padding: "10px 12px 12px", lineHeight: 1.45 }}>
+              Se anotó solo desde <a href="/vehiculos" className="fin-link" style={{ minHeight: 0, padding: 0, fontSize: 12 }}>Vehículos</a>. Si lo borrás allá, también se va de acá.
+            </p>
+          )}
           {movimiento.transcripcion && (
             <div className="fin-fila" style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
               <span>Lo que dictaste</span>
