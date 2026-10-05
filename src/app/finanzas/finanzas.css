@@ -139,3 +139,12 @@ button.fin-link { background: none; border: none; }
 /* Fila fija arriba (selector de período). En el celular, debajo del botón ☰ del menú de la app */
 .fin-fijo-arriba { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 4px 0 8px; }
 @media (max-width: 768px) { .fin-fijo-arriba { top: 56px; } }
+
+/* Resumen con IA (spec §9) */
+.fin-ia-tarjeta { background: var(--bg2); border: 1px solid var(--bd); border-radius: 12px; padding: 12px 14px; color: var(--tx); font-size: 14px; }
+.fin-ia-lista { margin: 0; padding-left: 18px; display: grid; gap: 4px; line-height: 1.45; }
+.fin-ia-aviso { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--amb-b); border: 1px solid var(--bd); border-radius: 10px; padding: 4px 6px 4px 12px; font-size: 13px; color: var(--tx2); }
+.fin-ia-generando { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tx2); padding: 8px 0; }
+.fin-ia-punto { width: 8px; height: 8px; border-radius: 999px; background: var(--acc); animation: fin-ia-latido 1s ease-in-out infinite alternate; }
+@keyframes fin-ia-latido { from { opacity: .3; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fin-ia-punto { animation: none; } }
