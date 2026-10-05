@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Montos from "./Montos";
 import { api, PasoFijos, PasoVariables, vibrar } from "./PasosRevision";
+import ResumenIa from "./ResumenIa";
 import { formatearTexto, montoDeTexto, textoDeMonto } from "./Teclado";
 import type { DatosCarga } from "@/lib/finanzas/carga";
 import type { DatosCierre } from "@/lib/finanzas/cierre";
@@ -245,7 +246,9 @@ function PasoMirada({ c, accion, onSiguiente }: { c: DatosCierre; accion: (b: ob
           <div key={m.id} className="fin-fila"><span style={{ flex: 1 }}>{m.icono || "🎯"} {m.nombre}</span><span>+{fmt(m.aportadoMes, m.moneda)}</span></div>
         ))}
       </div>
-      <p style={{ color: "var(--tx3)", fontSize: 12 }}>El resumen con IA (desvíos, gastos hormiga, suscripciones) se suma más adelante.</p>
+      <div style={{ marginTop: 14, textAlign: "left" }}>
+        <ResumenIa desde={c.anioMes} hasta={c.anioMes} autoGenerar />
+      </div>
       <Pie>
         <button type="button" className="fin-btn primario" disabled={cerrando} onClick={cerrar}>
           {c.estado === "cerrado" ? "Seguir con " + nombreMes(c.siguiente) : cerrando ? "Cerrando…" : `Cerrar ${nombreMes(c.anioMes)}`}

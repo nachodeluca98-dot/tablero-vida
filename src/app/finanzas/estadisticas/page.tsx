@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { BarraPartida, BarrasH, CATEGORICO, Columnas, compacto, ConTabla, Linea, mesCorto, SERIE, TablaDatos } from "@/components/finanzas/Graficos";
 import Montos from "@/components/finanzas/Montos";
+import ResumenIa from "@/components/finanzas/ResumenIa";
 import { fmtArs, fmtPct, fmtUsd, type Montos as M } from "@/lib/finanzas/dinero";
 import type { DatosEstadisticas } from "@/lib/finanzas/estadisticas";
 import { anioMesActual, nombreMes, sumarMeses } from "@/lib/finanzas/fechas";
@@ -148,9 +149,10 @@ function Estadisticas() {
           </div>
 
           {/* 2. Resumen IA (spec §9) */}
-          <Widget titulo="Resumen del período">
-            <Vacio titulo="El resumen con IA llega pronto" texto="Lo principal, desvíos, gastos hormiga, suscripciones a revisar y una recomendación concreta, para este mismo período." />
-          </Widget>
+          <section className="fin-seccion">
+            <div className="fin-seccion-head"><h2>Resumen del período</h2></div>
+            <ResumenIa key={`${desde}|${hasta}`} desde={desde} hasta={hasta} />
+          </section>
 
           {/* 3. Gastos por categoría */}
           <Widget titulo="Gastos por categoría">
