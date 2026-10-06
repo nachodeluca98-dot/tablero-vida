@@ -235,3 +235,7 @@ th { color: var(--tx3); font-weight: 600; font-size: 10px; text-transform: upper
   .vh-toast { bottom: calc(140px + env(safe-area-inset-bottom)) !important; }
   .app-main { padding-top: 16px !important; }
 }
+@media (max-width: 768px) {
+  body[data-barra-propia] .hamburger { display: block !important; }
+  body[data-barra-propia] .app-main { padding-top: 60px !important; padding-bottom: 12px !important; }
+}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { quitarCarga, quitarMantenimiento, sincronizarCarga, sincronizarMantenimiento } from "@/lib/finanzas/vehiculos";
 import { sendTelegram, sendTelegramWithButtons, editTelegramMessage, escapeHtml } from "@/lib/telegram";
 import type { Vehiculo } from "@prisma/client";
 import {
@@ -180,6 +181,7 @@ async function guardarCarga(p: Parseo, v: Vehiculo, raw: string, fuente: string,
     },
   });
   await actualizarOdometro(v.id, odometro, fecha);
+  await sincronizarCarga(carga.id);
 
   const r = await resumenVehiculo(v.id);
   const partes = [`${d.litros.toLocaleString("es-AR")} L`];
@@ -216,7 +218,7 @@ async function guardarMantenimiento(p: Parseo, v: Vehiculo, raw: string, fuente:
   const odometro = odometroValido(d.odometro, v);
   const fecha = fechaDesdeYmd(d.fecha);
 
-  await prisma.mantenimiento.create({
+  const mant = await prisma.mantenimiento.create({
     data: {
       vehiculoId: v.id,
       tipo,
@@ -232,6 +234,7 @@ async function guardarMantenimiento(p: Parseo, v: Vehiculo, raw: string, fuente:
     },
   });
   await actualizarOdometro(v.id, odometro, fecha);
+  await sincronizarMantenimiento(mant.id);
 
   const partes = [`${TIPO_EMOJI[tipo]} ${TIPO_LABEL[tipo]}`];
   if (odometro) partes.push(`${fmtKm(odometro)} km`);
@@ -360,7 +363,10 @@ export async function manejarCallbackVehiculo(data: string, chatId: string, mess
     const borrado = kind === "c"
       ? await prisma.cargaCombustible.delete({ where: { id } }).catch(() => null)
       : await prisma.mantenimiento.delete({ where: { id } }).catch(() => null);
-    if (borrado) await recalcularOdometro(borrado.vehiculoId);
+    if (borrado) {
+      await recalcularOdometro(borrado.vehiculoId);
+      await (kind === "c" ? quitarCarga(id) : quitarMantenimiento(id));
+    }
     await editTelegramMessage(chatId, messageId, borrado ? "🗑 Registro borrado." : "Ese registro ya no existe.");
     return borrado ? "Borrado" : "No encontrado";
   }

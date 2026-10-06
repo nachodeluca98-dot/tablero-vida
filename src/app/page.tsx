@@ -66,12 +66,14 @@ export default function Hoy() {
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachMsg, setCoachMsg] = useState("");
   const [toast, setToast] = useState<ToastData | null>(null);
+  const [falloCarga, setFalloCarga] = useState(false);
   // la hora se calcula solo en el navegador: el servidor corre en UTC
   const [ahoraCliente, setAhora] = useState<Date | null>(null);
   const ahora = ahoraCliente ?? new Date(0);
   const hoy = ahoraCliente ? ymdLocal(ahoraCliente) : "";
 
   const cargar = useCallback(async () => {
+    setFalloCarga(false);
     const [t, l, c, n, i, s, a] = await Promise.all([
       api("/api/tareas"),
       api("/api/habitos/logs").catch(() => []),
@@ -83,7 +85,7 @@ export default function Hoy() {
     ]);
     setTareas(t); setLogs(l); setCronograma(c); setNotas(n); setInsights(i); setSettings(s); setAutos(a);
   }, []);
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargar().catch(() => setFalloCarga(true)); }, [cargar]);
   useEffect(() => {
     setAhora(new Date());
     const id = setInterval(() => setAhora(new Date()), 60000);
@@ -183,6 +185,13 @@ export default function Hoy() {
         <h1 style={{ fontSize: 22, fontWeight: 700, minHeight: 28 }}>{ahoraCliente ? `${saludo()}, Nacho` : ""}</h1>
         <div style={{ color: "var(--tx3)", fontSize: 13, minHeight: 18 }}>{ahoraCliente ? fechaLarga : ""}</div>
       </div>
+
+      {falloCarga && (
+        <div className="card" style={{ borderColor: "var(--red)", display: "flex", gap: 10, alignItems: "center", padding: 12 }}>
+          <span style={{ flex: 1, fontSize: 13 }}>No pude cargar tus datos. Revisá la conexión.</span>
+          <button onClick={() => cargar().catch(() => setFalloCarga(true))}>Reintentar</button>
+        </div>
+      )}
 
       {(bloqueActual || bloqueProximo) && (() => {
         const b = bloqueActual ?? bloqueProximo;

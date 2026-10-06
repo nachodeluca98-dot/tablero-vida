@@ -8,35 +8,35 @@ datasource db {
 }
 
 model Tarea {
-  id               String    @id @default(cuid())
-  nombre           String
-  estado           String    @default("Sin empezar")
-  epica            String?
-  subepica         String?
-  tipo             String?
-  frecuencia       String?
-  prioridad        String?
-  fechaInicio      DateTime?
-  fechaFin         DateTime?
-  fechaVencimiento DateTime?
-  duracionMin      Int?
-  diasPreferidos   String?
-  horario          String?
-  alerta           Boolean   @default(false)
-  diasAnticipacion Int?
-  racha            Int       @default(0)
-  orden            Int       @default(0)
-  caracterVisibilidad String @default("Relevante")
-  mostrarEnHabitos Boolean @default(true)
-  habitoLogs       HabitoLog[]
-  energia          String?
-  notas            String?
-  proyectoId       String?
-  proyecto         Proyecto? @relation(fields: [proyectoId], references: [id])
-  googleEventId    String?
-  googleCalendarId String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  String      @id @default(cuid())
+  nombre              String
+  estado              String      @default("Sin empezar")
+  epica               String?
+  subepica            String?
+  tipo                String?
+  frecuencia          String?
+  prioridad           String?
+  fechaInicio         DateTime?
+  fechaFin            DateTime?
+  fechaVencimiento    DateTime?
+  duracionMin         Int?
+  diasPreferidos      String?
+  horario             String?
+  alerta              Boolean     @default(false)
+  diasAnticipacion    Int?
+  racha               Int         @default(0)
+  orden               Int         @default(0)
+  caracterVisibilidad String      @default("Relevante")
+  mostrarEnHabitos    Boolean     @default(true)
+  habitoLogs          HabitoLog[]
+  energia             String?
+  notas               String?
+  proyectoId          String?
+  proyecto            Proyecto?   @relation(fields: [proyectoId], references: [id])
+  googleEventId       String?
+  googleCalendarId    String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 }
 
 model Proyecto {
@@ -59,9 +59,10 @@ model HabitoLog {
   id        String   @id @default(cuid())
   tareaId   String
   tarea     Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
-  fecha     String   // YYYY-MM-DD
+  fecha     String // YYYY-MM-DD
   estado    String   @default("hecho") // "hecho" | "fallado"
   createdAt DateTime @default(now())
+
   @@unique([tareaId, fecha])
 }
 
@@ -85,17 +86,17 @@ model Nota {
 }
 
 model Settings {
-  id                      String  @id @default("user")
-  horaBriefing            String  @default("07:30")
-  horaReview              String  @default("22:00")
-  frecuenciaSync          Int     @default(6)
-  briefingActivo          Boolean @default(true)
-  alertasVencimiento      Boolean @default(true)
-  pushCalendar            Boolean @default(true)
-  resumenSemanal          Boolean @default(true)
-  alertaSobrecarga        Boolean @default(false)
-  googleCalendarConectado Boolean @default(false)
-  telegramConectado       Boolean @default(false)
+  id                      String    @id @default("user")
+  horaBriefing            String    @default("07:30")
+  horaReview              String    @default("22:00")
+  frecuenciaSync          Int       @default(6)
+  briefingActivo          Boolean   @default(true)
+  alertasVencimiento      Boolean   @default(true)
+  pushCalendar            Boolean   @default(true)
+  resumenSemanal          Boolean   @default(true)
+  alertaSobrecarga        Boolean   @default(false)
+  googleCalendarConectado Boolean   @default(false)
+  telegramConectado       Boolean   @default(false)
   telegramChatId          String?
   googleAccessToken       String?
   googleRefreshToken      String?
@@ -173,9 +174,9 @@ model CargaCombustible {
 }
 
 model Mantenimiento {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   vehiculoId    String
-  vehiculo      Vehiculo @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  vehiculo      Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
   tipo          String // service | aceite | neumaticos | vtv | seguro | patente | reparacion | otro
   fecha         DateTime
   odometro      Int?
@@ -185,9 +186,9 @@ model Mantenimiento {
   notas         String?
   venceFecha    DateTime?
   venceOdometro Int?
-  fuente        String   @default("formulario") // formulario | texto | voz | inicial | auto
+  fuente        String    @default("formulario") // formulario | texto | voz | inicial | auto
   rawInput      String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   @@index([vehiculoId, tipo, fecha])
 }
@@ -223,4 +224,411 @@ model BotPendiente {
   payload   String
   intentos  Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// ─── Módulo Finanzas ────────────────────────────────────────────
+// Spec: docs/modulo-finanzas.md. Tablas y columnas en la base con los nombres del spec (fin_*, snake_case).
+// Montos en Decimal(14,2); tipos de cambio (ARS por 1 USD) en Decimal(12,4).
+// montoArs / montoUsd quedan null mientras el mes no tenga tipo de cambio cargado.
+
+enum FinTipo {
+  gasto
+  ingreso
+  ahorro
+}
+
+enum FinFijoVariable {
+  fijo
+  variable
+}
+
+enum FinNaturaleza {
+  esencial
+  discrecional
+}
+
+enum FinMoneda {
+  ARS
+  USD
+}
+
+enum FinEstadoMes {
+  abierto
+  cerrado
+}
+
+enum FinFrecuencia {
+  mensual
+  bimestral
+  trimestral
+  anual
+}
+
+enum FinMedioPago {
+  efectivo
+  debito
+  transferencia
+  billetera
+  tarjeta_credito
+}
+
+enum FinOrigenItem {
+  manual
+  clon
+  cuotas
+  modulo_vehiculos
+  onboarding
+  reasignacion // par de ajustes al mover plata entre categorías; no se clona
+}
+
+enum FinOrigenRegistro {
+  app_voz
+  app_rapida
+  app_formulario
+  revision
+  cuotas
+  modulo_vehiculos
+}
+
+enum FinTipoMeta {
+  fondo_emergencia
+  meta
+}
+
+enum FinTipoCuenta {
+  banco
+  billetera
+  efectivo
+  broker
+  cripto
+  otro
+}
+
+enum FinTipoRevision {
+  apertura
+  quincenal
+  cierre
+}
+
+enum FinModoRevision {
+  completo
+  expres
+}
+
+enum FinEstadoRevision {
+  pendiente
+  en_curso
+  completa
+  salteada
+}
+
+enum FinEstadoGuia {
+  pendiente
+  vista
+  completada
+  descartada
+}
+
+model FinCategoria {
+  id                  String               @id @default(cuid())
+  nombre              String
+  tipo                FinTipo
+  fijoVariableDefault FinFijoVariable      @default(variable) @map("fijo_variable_default")
+  naturalezaDefault   FinNaturaleza        @default(esencial) @map("naturaleza_default")
+  icono               String?
+  color               String?
+  orden               Int                  @default(0)
+  activa              Boolean              @default(true)
+  items               FinPresupuestoItem[]
+  registros           FinRegistro[]
+  planesCuotas        FinPlanCuotas[]
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  @@map("fin_categorias")
+}
+
+model FinMes {
+  id                 String                  @id @default(cuid())
+  anioMes            String                  @unique @map("anio_mes") @db.Char(7) // "2026-10"
+  tipoCambio         Decimal?                @map("tipo_cambio") @db.Decimal(12, 4)
+  fuenteTc           String?                 @map("fuente_tc")
+  ajusteInflacionPct Decimal?                @map("ajuste_inflacion_pct") @db.Decimal(6, 2)
+  estado             FinEstadoMes            @default(abierto)
+  cerradoAt          DateTime?               @map("cerrado_at")
+  items              FinPresupuestoItem[]
+  registros          FinRegistro[]
+  aportes            FinAporteMeta[]
+  snapshots          FinPatrimonioSnapshot[]
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+
+  @@map("fin_meses")
+}
+
+model FinPresupuestoItem {
+  id                   String               @id @default(cuid())
+  mesId                String               @map("mes_id")
+  mes                  FinMes               @relation(fields: [mesId], references: [id], onDelete: Cascade)
+  categoriaId          String               @map("categoria_id")
+  categoria            FinCategoria         @relation(fields: [categoriaId], references: [id])
+  concepto             String
+  incluye              String?
+  montoOriginal        Decimal              @map("monto_original") @db.Decimal(14, 2)
+  monedaOriginal       FinMoneda            @default(ARS) @map("moneda_original")
+  montoArs             Decimal?             @map("monto_ars") @db.Decimal(14, 2)
+  montoUsd             Decimal?             @map("monto_usd") @db.Decimal(14, 2)
+  frecuencia           FinFrecuencia        @default(mensual)
+  montoPrevistoMensual Decimal?             @map("monto_previsto_mensual") @db.Decimal(14, 2) // prorrateo en moneda original
+  recurrente           Boolean              @default(true)
+  fijoVariable         FinFijoVariable      @default(variable) @map("fijo_variable")
+  naturaleza           FinNaturaleza        @default(esencial)
+  diaVencimiento       Int?                 @map("dia_vencimiento")
+  medioPago            FinMedioPago?        @map("medio_pago")
+  tarjetaId            String?              @map("tarjeta_id")
+  tarjeta              FinTarjeta?          @relation(fields: [tarjetaId], references: [id], onDelete: SetNull)
+  origen               FinOrigenItem        @default(manual)
+  itemOrigenId         String?              @map("item_origen_id")
+  itemOrigen           FinPresupuestoItem?  @relation("ClonItem", fields: [itemOrigenId], references: [id], onDelete: SetNull)
+  clones               FinPresupuestoItem[] @relation("ClonItem")
+  planCuotasId         String?              @map("plan_cuotas_id")
+  planCuotas           FinPlanCuotas?       @relation(fields: [planCuotasId], references: [id], onDelete: Cascade)
+  metaId               String?              @map("meta_id") // ítem de ahorro: a qué meta va (apertura, spec §6.4)
+  meta                 FinMeta?             @relation(fields: [metaId], references: [id], onDelete: SetNull)
+  activo               Boolean              @default(true) // false = quitado este mes
+  registros            FinRegistro[]
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  @@index([mesId, categoriaId])
+  @@map("fin_presupuesto_items")
+}
+
+// Unidad base: lo que efectivamente pasó. Puede ser un gasto suelto o uno agrupado (ver `incluye`).
+model FinRegistro {
+  id                String              @id @default(cuid())
+  mesId             String              @map("mes_id") // mes de imputación
+  mes               FinMes              @relation(fields: [mesId], references: [id])
+  fecha             DateTime            @db.Date
+  tipo              FinTipo             @default(gasto)
+  categoriaId       String?             @map("categoria_id") // null = sin clasificar
+  categoria         FinCategoria?       @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  presupuestoItemId String?             @map("presupuesto_item_id")
+  presupuestoItem   FinPresupuestoItem? @relation(fields: [presupuestoItemId], references: [id], onDelete: SetNull)
+  descripcion       String?
+  incluye           String?
+  montoOriginal     Decimal             @map("monto_original") @db.Decimal(14, 2)
+  monedaOriginal    FinMoneda           @default(ARS) @map("moneda_original")
+  montoArs          Decimal?            @map("monto_ars") @db.Decimal(14, 2)
+  montoUsd          Decimal?            @map("monto_usd") @db.Decimal(14, 2)
+  tcPropio          Decimal?            @map("tc_propio") @db.Decimal(12, 4) // si está, no se recalcula al cambiar el TC del mes
+  esAproximado      Boolean             @default(false) @map("es_aproximado")
+  fijoVariable      FinFijoVariable?    @map("fijo_variable")
+  naturaleza        FinNaturaleza?
+  medioPago         FinMedioPago?       @map("medio_pago")
+  tarjetaId         String?             @map("tarjeta_id")
+  tarjeta           FinTarjeta?         @relation(fields: [tarjetaId], references: [id], onDelete: SetNull)
+  planCuotasId      String?             @map("plan_cuotas_id")
+  planCuotas        FinPlanCuotas?      @relation("CuotasDelPlan", fields: [planCuotasId], references: [id], onDelete: SetNull)
+  cuotaNumero       Int?                @map("cuota_numero")
+  compartido        Boolean             @default(false)
+  notaCompartido    String?             @map("nota_compartido")
+  metaId            String?             @map("meta_id")
+  meta              FinMeta?            @relation(fields: [metaId], references: [id], onDelete: SetNull)
+  origen            FinOrigenRegistro   @default(app_formulario)
+  origenRefId       String?             @map("origen_ref_id") // id en el módulo de origen, para deduplicar
+  transcripcion     String?
+  planOriginado     FinPlanCuotas?      @relation("RegistroOrigenPlan")
+  aportes           FinAporteMeta[]
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@index([mesId, tipo])
+  @@index([fecha])
+  @@index([categoriaId])
+  @@index([origenRefId])
+  @@index([origen, origenRefId])
+  @@map("fin_registros")
+}
+
+model FinTarjeta {
+  id              String               @id @default(cuid())
+  nombre          String
+  diaCierre       Int                  @map("dia_cierre")
+  diaVencimiento  Int?                 @map("dia_vencimiento")
+  monedaPrincipal FinMoneda            @default(ARS) @map("moneda_principal")
+  esDefault       Boolean              @default(false) @map("es_default")
+  activa          Boolean              @default(true)
+  items           FinPresupuestoItem[]
+  registros       FinRegistro[]
+  planesCuotas    FinPlanCuotas[]
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  @@map("fin_tarjetas")
+}
+
+model FinPlanCuotas {
+  id               String               @id @default(cuid())
+  descripcion      String
+  categoriaId      String?              @map("categoria_id")
+  categoria        FinCategoria?        @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  tarjetaId        String?              @map("tarjeta_id")
+  tarjeta          FinTarjeta?          @relation(fields: [tarjetaId], references: [id], onDelete: SetNull)
+  montoCuota       Decimal              @map("monto_cuota") @db.Decimal(14, 2)
+  moneda           FinMoneda            @default(ARS)
+  cuotasTotal      Int                  @map("cuotas_total")
+  mesPrimeraCuota  String               @map("mes_primera_cuota") @db.Char(7)
+  registroOrigenId String?              @unique @map("registro_origen_id")
+  registroOrigen   FinRegistro?         @relation("RegistroOrigenPlan", fields: [registroOrigenId], references: [id], onDelete: SetNull)
+  items            FinPresupuestoItem[]
+  cuotas           FinRegistro[]        @relation("CuotasDelPlan")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  @@map("fin_planes_cuotas")
+}
+
+// Fondo de emergencia: objetivo = mesesCobertura × promedio de gastos esenciales de los últimos 3 meses cerrados.
+model FinMeta {
+  id             String               @id @default(cuid())
+  nombre         String
+  tipo           FinTipoMeta          @default(meta)
+  icono          String?
+  montoObjetivo  Decimal?             @map("monto_objetivo") @db.Decimal(14, 2)
+  moneda         FinMoneda?
+  mesesCobertura Int?                 @map("meses_cobertura")
+  fechaObjetivo  DateTime?            @map("fecha_objetivo") @db.Date
+  activa         Boolean              @default(true)
+  registros      FinRegistro[]
+  aportes        FinAporteMeta[]
+  items          FinPresupuestoItem[]
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  @@map("fin_metas")
+}
+
+// Montos negativos = retiros
+model FinAporteMeta {
+  id             String       @id @default(cuid())
+  metaId         String       @map("meta_id")
+  meta           FinMeta      @relation(fields: [metaId], references: [id], onDelete: Cascade)
+  mesId          String       @map("mes_id")
+  mes            FinMes       @relation(fields: [mesId], references: [id])
+  registroId     String?      @map("registro_id")
+  registro       FinRegistro? @relation(fields: [registroId], references: [id], onDelete: SetNull)
+  montoOriginal  Decimal      @map("monto_original") @db.Decimal(14, 2)
+  monedaOriginal FinMoneda    @default(ARS) @map("moneda_original")
+  montoArs       Decimal?     @map("monto_ars") @db.Decimal(14, 2)
+  montoUsd       Decimal?     @map("monto_usd") @db.Decimal(14, 2)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@index([metaId, mesId])
+  @@map("fin_aportes_meta")
+}
+
+model FinCuenta {
+  id        String                  @id @default(cuid())
+  nombre    String
+  tipo      FinTipoCuenta           @default(banco)
+  moneda    FinMoneda               @default(ARS)
+  icono     String?
+  activa    Boolean                 @default(true)
+  orden     Int                     @default(0)
+  snapshots FinPatrimonioSnapshot[]
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+
+  @@map("fin_cuentas")
+}
+
+model FinPatrimonioSnapshot {
+  id             String    @id @default(cuid())
+  mesId          String    @map("mes_id")
+  mes            FinMes    @relation(fields: [mesId], references: [id], onDelete: Cascade)
+  cuentaId       String    @map("cuenta_id")
+  cuenta         FinCuenta @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  saldoOriginal  Decimal   @map("saldo_original") @db.Decimal(14, 2)
+  monedaOriginal FinMoneda @default(ARS) @map("moneda_original")
+  saldoArs       Decimal?  @map("saldo_ars") @db.Decimal(14, 2)
+  saldoUsd       Decimal?  @map("saldo_usd") @db.Decimal(14, 2)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([mesId, cuentaId])
+  @@map("fin_patrimonio_snapshots")
+}
+
+// Permite retomar una revisión donde se dejó y medir adopción
+model FinRevision {
+  id          String            @id @default(cuid())
+  fecha       DateTime          @db.Date
+  tipo        FinTipoRevision
+  modo        FinModoRevision   @default(completo)
+  estado      FinEstadoRevision @default(pendiente)
+  pasoActual  Int               @default(0) @map("paso_actual")
+  duracionSeg Int?              @map("duracion_seg")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  @@index([fecha, tipo])
+  @@map("fin_revisiones")
+}
+
+model FinResumenIa {
+  id             String   @id @default(cuid())
+  periodoDesde   DateTime @map("periodo_desde") @db.Date
+  periodoHasta   DateTime @map("periodo_hasta") @db.Date
+  contenido      String // markdown
+  metricasInput  Json     @map("metricas_input")
+  generadoAt     DateTime @default(now()) @map("generado_at")
+  desactualizado Boolean  @default(false) // se marca si cambian registros del período
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([periodoDesde, periodoHasta])
+  @@map("fin_resumenes_ia")
+}
+
+// guiaId = id del catálogo en src/lib/finanzas/guias.ts
+model FinGuiaEstado {
+  id                String        @id @default(cuid())
+  guiaId            String        @unique @map("guia_id")
+  estado            FinEstadoGuia @default(pendiente)
+  vistaAt           DateTime?     @map("vista_at")
+  vecesMostrada     Int           @default(0) @map("veces_mostrada")
+  vecesDescartada   Int           @default(0) @map("veces_descartada") // a las 2 no vuelve
+  ultimaVezMostrada DateTime?     @map("ultima_vez_mostrada") // para limitar a una guía nueva por día
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  @@map("fin_guias_estado")
+}
+
+// Una sola fila (id "user"), igual que Settings. La tarjeta default se marca en FinTarjeta.esDefault.
+model FinPreferencias {
+  id                     String    @id @default("user")
+  diasRevision           Int[]     @default([15, 0]) @map("dias_revision") // 0 = último día del mes
+  ajusteInflacionDefault Decimal?  @map("ajuste_inflacion_default") @db.Decimal(6, 2)
+  mostrarGuias           Boolean   @default(true) @map("mostrar_guias")
+  avisosTelegram         Json      @default("{}") @map("avisos_telegram") // { tipoAviso: boolean }; ausente = activo
+  onboardingPaso         Int       @default(0) @map("onboarding_paso") // para retomar el onboarding; -1 = completo
+  vehiculosImportadoAt   DateTime? @map("vehiculos_importado_at") // importación inicial de gastos de Vehículos (spec §12)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@map("fin_preferencias")
+}
+
+// Avisos por Telegram ya enviados (spec §8): evita repetir y permite "una vez por umbral por mes" y el recordatorio a las 24 h
+model FinAviso {
+  id        String   @id @default(cuid())
+  clave     String   @unique // ej. "cat80:fincat_super:2026-10", "rev:2026-10-15"
+  tipo      String
+  enviadoAt DateTime @default(now()) @map("enviado_at")
+
+  @@index([tipo, enviadoAt])
+  @@map("fin_avisos")
 }

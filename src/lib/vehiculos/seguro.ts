@@ -1,7 +1,8 @@
 // El seguro es un gasto mensual: cada mes se registra la cuota vigente como un Mantenimiento tipo "seguro"
 import { prisma } from "@/lib/prisma";
 import { escapeHtml } from "@/lib/telegram";
-import { notificar } from "./canal";
+import { notificar } from "@/lib/compartido/canal";
+import { sincronizarMantenimiento } from "@/lib/finanzas/vehiculos";
 import { fmtPesos, hoyYmd } from "./core";
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -32,16 +33,15 @@ export async function actualizarSeguro(vehiculoId: string, monto: number | null,
   const { desde } = mesActual();
   const existente = await cuotaDelMes(vehiculoId);
   const descripcion = `Cuota mensual${v.seguroCompania ? ` — ${v.seguroCompania}` : ""}`;
-  if (existente) {
-    await prisma.mantenimiento.update({
-      where: { id: existente.id },
-      data: { monto, descripcion, fuente: confirmado ? "confirmado" : existente.fuente },
-    });
-  } else {
-    await prisma.mantenimiento.create({
-      data: { vehiculoId, tipo: "seguro", fecha: desde, monto, descripcion, fuente: confirmado ? "confirmado" : "auto" },
-    });
-  }
+  const cuota = existente
+    ? await prisma.mantenimiento.update({
+        where: { id: existente.id },
+        data: { monto, descripcion, fuente: confirmado ? "confirmado" : existente.fuente },
+      })
+    : await prisma.mantenimiento.create({
+        data: { vehiculoId, tipo: "seguro", fecha: desde, monto, descripcion, fuente: confirmado ? "confirmado" : "auto" },
+      });
+  await sincronizarMantenimiento(cuota.id);
   return v;
 }
 

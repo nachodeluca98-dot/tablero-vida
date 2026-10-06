@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TIPOS_MANT, actualizarOdometro, fechaDesdeYmd } from "@/lib/vehiculos/core";
 import { confirmarSeguroMes } from "@/lib/vehiculos/seguro";
 import { feedbackMantenimiento } from "@/lib/vehiculos/feedback";
+import { sincronizarMantenimiento } from "@/lib/finanzas/vehiculos";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +24,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     data: { vehiculoId: params.id, tipo: b.tipo, fecha, odometro, monto, descripcion: "Marcado como hecho desde pendientes", fuente: "formulario" },
   });
   await actualizarOdometro(params.id, odometro, fecha);
+  await sincronizarMantenimiento(m.id);
   return NextResponse.json({ ok: true, id: m.id, kind: "mantenimiento", feedback: await feedbackMantenimiento(params.id, b.tipo) });
 }
