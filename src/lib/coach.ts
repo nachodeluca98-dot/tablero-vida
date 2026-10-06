@@ -2,6 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "./prisma";
 import { pilarKey, PILARES } from "./pilares";
+import { DIAS_CORTOS, DIAS_LARGOS, diaSemanaAR } from "@/lib/dias";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -15,12 +16,12 @@ export async function buildContext() {
   const inicioHoy = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const finHoy = new Date(+inicioHoy + 86400000);
   const en7 = new Date(+now + 7 * 86400000);
-  const DIAS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-  const diaSem = DIAS[now.getDay()];
+  const diaSem = DIAS_LARGOS[diaSemanaAR(now)];
+  const diaCorto = DIAS_CORTOS[diaSemanaAR(now)];
 
   const [habitos, tareasHoy, vencen, bloques] = await Promise.all([
     prisma.tarea.findMany({
-      where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
+      where: { tipo: "Hábito", mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
       include: { habitoLogs: { where: { fecha: hoy } } },
     }),
     prisma.tarea.findMany({
@@ -37,7 +38,7 @@ export async function buildContext() {
       orderBy: { fechaVencimiento: "asc" },
       take: 8,
     }),
-    prisma.cronogramaBase.findMany({ where: { dia: diaSem }, orderBy: { horarioInicio: "asc" } }),
+    prisma.cronogramaBase.findMany({ where: { dia: diaCorto }, orderBy: { horarioInicio: "asc" } }),
   ]);
 
   const horaActual = now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });

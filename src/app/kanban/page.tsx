@@ -1,5 +1,7 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
+import { esRecurrente, venceInfo } from "@/lib/tareas";
+import { Campo, Chips, PageHeader, Sheet, TipBanner, Toast, type ToastData, api, guardarLocal, leerLocal } from "@/components/ui";
 import { useSearchParams } from "next/navigation";
 import { PILARES, pilarKey, PilarKey } from "@/lib/pilares";
 import EditTareaModal from "@/components/EditTareaModal";
@@ -50,43 +52,29 @@ function normEstadoEn(e: string | undefined, cols: string[]) {
   return cols[0];
 }
 
-function esRecurrente(t: any) {
-  if (t.tipo === "Hábito") return true;
-  if (!t.frecuencia) return false;
-  const f = String(t.frecuencia).toLowerCase();
-  if (f === "" || f === "puntual" || f === "una vez" || f === "única") return false;
-  return true;
-}
+const NUEVA_VACIA = { nombre: "", epica: "", estado: "", prioridad: "Media", fechaVencimiento: "", notas: "", recurrente: false, frecuencia: "Semanal" };
 
-function venceInfo(fecha?: string | null) {
-  if (!fecha) return { txt: "sin fecha", color: "tx3", bg: "var(--bg3)" };
-  const d = Math.ceil((+new Date(fecha) - Date.now()) / 86400000);
-  const fmt = new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
-  if (d < 0) return { txt: `${fmt} · vencido`, color: "red-t", bg: "var(--red-b)" };
-  if (d === 0) return { txt: `${fmt} · hoy`, color: "red-t", bg: "var(--red-b)" };
-  if (d === 1) return { txt: `${fmt} · mañana`, color: "red-t", bg: "var(--red-b)" };
-  if (d <= 7) return { txt: `${fmt} · ${d}d`, color: "amb-t", bg: "var(--amb-b)" };
-  return { txt: fmt, color: "tx2", bg: "var(--bg3)" };
+function columnaHecha(cols: string[]) {
+  return cols.find(c => /complet|subido/i.test(c)) ?? cols[cols.length - 1];
 }
 
 function Kanban() {
   const sp = useSearchParams();
-  const [tareas, setTareas] = useState<any[]>([]);
+  const [tareas, setTareas] = useState<any[] | null>(null);
+  const [vista, setVista] = useState<"lista" | "tablero">("lista");
   const [drag, setDrag] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<{ col: string; index: number } | null>(null);
   const [filtroPilar, setFiltroPilar] = useState<PilarKey | "todos">("todos");
   const [filtroRec, setFiltroRec] = useState<"todos" | "puntual" | "recurrente">("todos");
   const [filtroSub, setFiltroSub] = useState<string | "todos">("todos");
   const [verNoAun, setVerNoAun] = useState(false);
+  const [verHabitos, setVerHabitos] = useState(false);
   const [quickAdd, setQuickAdd] = useState<Record<string, string>>({});
   const [editId, setEditId] = useState<string | null>(null);
-  const [showFull, setShowFull] = useState(false);
-  const [colWidth, setColWidth] = useState(280); // zoom: px por columna en desktop
-  const [nueva, setNueva] = useState<any>({
-    nombre: "", epica: "Profesional", tipo: "Tarea", estado: "Sin empezar",
-    prioridad: "Media", caracterVisibilidad: "Relevante",
-    fechaVencimiento: "", duracionMin: "", notas: "",
-  });
+  const [nuevaAbierta, setNuevaAbierta] = useState(false);
+  const [nueva, setNueva] = useState<any>(NUEVA_VACIA);
+  const [colWidth, setColWidth] = useState(280);
+  const [toast, setToast] = useState<ToastData | null>(null);
 
   useEffect(() => {
     const p = sp.get("pilar") as PilarKey | null;
@@ -94,14 +82,21 @@ function Kanban() {
   }, [sp]);
 
   async function cargar() {
-    const t = await fetch("/api/tareas").then(r => r.json());
-    setTareas(t);
+    setTareas(await api("/api/tareas"));
   }
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    cargar();
+    const v = leerLocal("tareas-vista");
+    if (v === "lista" || v === "tablero") setVista(v);
+    else setVista(window.innerWidth > 900 ? "tablero" : "lista");
+  }, []);
 
   const COLUMNAS = columnasDe(filtroPilar);
+  const HECHA = columnaHecha(COLUMNAS);
+  const pilarNombre = filtroPilar === "todos" ? "Meta-sistema" : PILARES.find(p => p.key === filtroPilar)?.nombre || "";
 
-  const tareasFiltradas = tareas.filter(t => {
+  const tareasFiltradas = (tareas ?? []).filter(t => {
+    if (!verHabitos && t.tipo === "Hábito") return false;
     if (filtroPilar !== "todos" && pilarKey(t.epica) !== filtroPilar) return false;
     if (!verNoAun && t.caracterVisibilidad === "No aún") return false;
     if (filtroRec === "puntual" && esRecurrente(t)) return false;
@@ -118,281 +113,268 @@ function Kanban() {
   }
 
   async function onDrop(col: string, index: number) {
-    if (!drag) return;
+    if (!drag || !tareas) return;
     const dest = itemsDe(col).filter(t => t.id !== drag);
     const dragged = tareas.find(t => t.id === drag);
     if (!dragged) return;
     dest.splice(index, 0, dragged);
     const ids = dest.map(t => t.id);
-
-    setTareas(prev => prev.map(t => {
+    setTareas(prev => (prev ?? []).map(t => {
       const idx = ids.indexOf(t.id);
-      if (idx === -1) return t;
-      return { ...t, estado: col, orden: idx };
+      return idx === -1 ? t : { ...t, estado: col, orden: idx };
     }));
-
     setDrag(null); setDragOver(null);
-
-    await fetch("/api/tareas/reorder", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ estado: col, ids }),
-    });
+    await api("/api/tareas/reorder", "POST", { estado: col, ids });
     cargar();
+  }
+
+  async function mover(t: any, col: string, avisar = true) {
+    const previo = t.estado;
+    setTareas(prev => (prev ?? []).map(x => (x.id === t.id ? { ...x, estado: col } : x)));
+    await api(`/api/tareas/${t.id}`, "PATCH", { estado: col });
+    if (avisar) {
+      setToast({
+        titulo: col === HECHA ? "✓ Completada" : `Movida a ${col}`, lineas: [t.nombre],
+        deshacer: async () => { await api(`/api/tareas/${t.id}`, "PATCH", { estado: previo }); cargar(); },
+      });
+    }
   }
 
   async function crearRapida(col: string) {
     const nombre = (quickAdd[col] || "").trim();
     if (!nombre) return;
-    // Si hay un filtro de pilar activo, lo usa como épica por defecto
-    const epica = filtroPilar === "todos" ? "Meta-sistema" : PILARES.find(p => p.key === filtroPilar)?.nombre || "";
-    await fetch("/api/tareas", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        nombre,
-        estado: col,
-        epica,
-        tipo: "Tarea",
-        caracterVisibilidad: "Relevante",
-        prioridad: "Media",
-      }),
-    });
     setQuickAdd(prev => ({ ...prev, [col]: "" }));
+    await api("/api/tareas", "POST", { nombre, estado: col, epica: pilarNombre, tipo: "Tarea", caracterVisibilidad: "Relevante", prioridad: "Media" });
     cargar();
   }
 
   async function crearCompleta() {
     if (!nueva.nombre.trim()) return;
-    const data: any = { ...nueva };
-    if (!data.fechaVencimiento) delete data.fechaVencimiento;
-    else data.fechaVencimiento = new Date(data.fechaVencimiento).toISOString();
-    if (data.duracionMin) data.duracionMin = Number(data.duracionMin); else delete data.duracionMin;
-    await fetch("/api/tareas", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    setNueva({ nombre: "", epica: "Profesional", tipo: "Tarea", estado: "Sin empezar", prioridad: "Media", caracterVisibilidad: "Relevante", fechaVencimiento: "", duracionMin: "", notas: "" });
-    setShowFull(false);
+    const data: any = {
+      nombre: nueva.nombre.trim(),
+      epica: nueva.epica || pilarNombre,
+      estado: nueva.estado || COLUMNAS[0],
+      prioridad: nueva.prioridad,
+      notas: nueva.notas || null,
+      tipo: "Tarea",
+      caracterVisibilidad: "Relevante",
+      frecuencia: nueva.recurrente ? nueva.frecuencia : "Puntual",
+    };
+    if (nueva.fechaVencimiento) data.fechaVencimiento = new Date(`${nueva.fechaVencimiento}T12:00:00`).toISOString();
+    await api("/api/tareas", "POST", data);
+    setNueva(NUEVA_VACIA);
+    setNuevaAbierta(false);
+    setToast({ titulo: "✓ Tarea creada", lineas: [data.nombre] });
     cargar();
   }
 
-  async function borrarTarea(id: string) {
-    if (!confirm("¿Borrar tarea?")) return;
-    await fetch(`/api/tareas/${id}`, { method: "DELETE" });
-    cargar();
-  }
+  const cambiarVista = (v: "lista" | "tablero") => { setVista(v); guardarLocal("tareas-vista", v); };
+  const pilaresConTareas = PILARES.filter(p => (tareas ?? []).some(t => pilarKey(t.epica) === p.key));
 
-  async function setCaracter(id: string, caracter: string) {
-    await fetch(`/api/tareas/${id}`, {
-      method: "PATCH", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ caracterVisibilidad: caracter }),
-    });
-    cargar();
-  }
+  const Fila = ({ t }: { t: any }) => {
+    const k = pilarKey(t.epica);
+    const v = venceInfo(t.fechaVencimiento);
+    const col = normEstadoEn(t.estado, COLUMNAS);
+    const hecha = col === HECHA;
+    return (
+      <div className="fila" style={{ opacity: t.caracterVisibilidad === "No aún" ? 0.6 : 1 }}>
+        <button className={`check ${hecha ? "on" : ""}`} onClick={() => mover(t, hecha ? COLUMNAS[0] : HECHA)} aria-label={hecha ? "Reabrir" : "Completar"}>{hecha ? "✓" : ""}</button>
+        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => setEditId(t.id)}>
+          <div style={{ textDecoration: hecha ? "line-through" : "none", color: hecha ? "var(--tx3)" : undefined }}>{t.nombre}</div>
+          <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+            {filtroPilar === "todos" && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)`, textTransform: "none" }}>{PILARES.find(p => p.key === k)?.emoji} {PILARES.find(p => p.key === k)?.short}</span>}
+            {t.fechaVencimiento && !hecha && <span className="tag" style={{ background: v.bg, color: `var(--${v.color})`, textTransform: "none" }}>{v.txt}</span>}
+            {esRecurrente(t) && <span className="tag" style={{ background: "var(--apr-b)", color: "var(--apr-t)", textTransform: "none" }}>🔁 {t.frecuencia}</span>}
+            {(t.prioridad === "Crítica" || t.prioridad === "Alta") && <span className="tag" style={{ background: "var(--red-b)", color: "var(--red-t)", textTransform: "none" }}>{t.prioridad}</span>}
+          </div>
+        </div>
+        <select value={col} onChange={e => mover(t, e.target.value)} aria-label="Mover a"
+          style={{ width: "auto", maxWidth: 110, fontSize: 11, padding: "4px 6px", color: "var(--tx2)" }}>
+          {COLUMNAS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+    );
+  };
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Kanban</h1>
-      <p style={{ color: "var(--tx3)", marginBottom: 12, fontSize: 12 }}>
-        Arrastrá entre columnas o reordená dentro. Click en ★/☆ cambia carácter de visibilidad.
-      </p>
+      <PageHeader titulo="Tareas" sub={tareas ? `${tareasFiltradas.filter(t => normEstadoEn(t.estado, COLUMNAS) !== HECHA).length} abiertas` : undefined}>
+        <button className="primary" onClick={() => { setNueva({ ...NUEVA_VACIA, epica: pilarNombre, estado: COLUMNAS[0] }); setNuevaAbierta(true); }}>+ Tarea</button>
+      </PageHeader>
 
-      {/* Filtros de pilar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button className={filtroPilar === "todos" ? "primary" : ""} onClick={() => setFiltroPilar("todos")}>Todos</button>
-        {PILARES.map(p => (
-          <button key={p.key}
-            className={filtroPilar === p.key ? "primary" : ""}
-            onClick={() => setFiltroPilar(p.key)}
-            style={{ borderLeft: `3px solid var(--${p.key})` }}>
-            {p.emoji} {p.nombre}
-          </button>
+      <TipBanner id="tareas-1">
+        Tildá el círculo para completar y usá el selector de la derecha para mover de columna. En la compu, la vista <b>Tablero</b> te deja arrastrar.
+      </TipBanner>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+        {(["lista", "tablero"] as const).map(v => (
+          <button key={v} className={`vh-tab ${vista === v ? "on" : ""}`} onClick={() => cambiarVista(v)}>{v === "lista" ? "☰ Lista" : "▦ Tablero"}</button>
         ))}
+        <div style={{ marginLeft: "auto" }}>
+          <Chips valor={filtroRec} onChange={setFiltroRec} opciones={[
+            { key: "todos" as const, label: "Todas" }, { key: "puntual" as const, label: "⚡ Una vez" }, { key: "recurrente" as const, label: "🔁 Se repiten" },
+          ]} />
+        </div>
       </div>
 
-      {/* Subfiltro Capitalist (solo Gestión Adulta) */}
+      <div style={{ marginBottom: 10 }}>
+        <Chips valor={filtroPilar} onChange={v => { setFiltroPilar(v); setFiltroSub("todos"); }}
+          opciones={[{ key: "todos" as const, label: "Todos" }, ...pilaresConTareas.map(p => ({ key: p.key, label: `${p.emoji} ${p.short}`, color: p.key }))]} />
+      </div>
       {filtroPilar === "ges" && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "var(--tx3)" }}>Sub-épica:</span>
-          <button className={filtroSub === "todos" ? "primary" : ""} onClick={() => setFiltroSub("todos")} style={{ fontSize: 11, padding: "3px 10px" }}>Todas</button>
-          <button className={filtroSub === "Capitalist" ? "primary" : ""} onClick={() => setFiltroSub("Capitalist")} style={{ fontSize: 11, padding: "3px 10px" }}>💰 Capitalist</button>
+        <div style={{ marginBottom: 10 }}>
+          <Chips valor={filtroSub} onChange={setFiltroSub} opciones={[{ key: "todos", label: "Todas" }, { key: "Capitalist", label: "💰 Capitalist" }]} />
         </div>
       )}
 
-      {/* Filtros de recurrencia + zoom + toggles */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 4, background: "var(--bg2)", padding: 3, borderRadius: 6, border: "1px solid var(--bd)" }}>
-          {[
-            { k: "todos", l: "Todas" },
-            { k: "puntual", l: "⚡ Puntuales" },
-            { k: "recurrente", l: "🔁 Recurrentes" },
-          ].map(o => (
-            <button key={o.k}
-              onClick={() => setFiltroRec(o.k as any)}
-              className={filtroRec === o.k ? "primary" : ""}
-              style={{ fontSize: 11, padding: "3px 10px" }}>
-              {o.l}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: "var(--tx3)" }}>
-          Zoom:
-          <button onClick={() => setColWidth(w => Math.max(180, w - 40))} style={{ padding: "3px 8px", fontSize: 12 }}>−</button>
-          <button onClick={() => setColWidth(w => Math.min(500, w + 40))} style={{ padding: "3px 8px", fontSize: 12 }}>+</button>
-        </div>
-
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-            <input type="checkbox" checked={verNoAun} onChange={e => setVerNoAun(e.target.checked)} />
-            Mostrar "No aún"
-          </label>
-          <button className="primary" onClick={() => setShowFull(!showFull)}>+ Tarea detallada</button>
-        </div>
-      </div>
-
-      {showFull && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-title">Nueva tarea</div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10 }}>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Nombre</div>
-              <input type="text" value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} /></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Pilar (épica)</div>
-              <select value={nueva.epica} onChange={e => setNueva({ ...nueva, epica: e.target.value })}>
-                {PILARES.map(p => <option key={p.key}>{p.nombre}</option>)}
-              </select></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Tipo</div>
-              <select value={nueva.tipo} onChange={e => setNueva({ ...nueva, tipo: e.target.value })}>
-                <option>Tarea</option><option>Hábito</option><option>Vencimiento</option><option>Proyecto</option>
-              </select></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Estado</div>
-              <select value={nueva.estado} onChange={e => setNueva({ ...nueva, estado: e.target.value })}>
-                {COLUMNAS.map(c => <option key={c}>{c}</option>)}
-              </select></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Prioridad</div>
-              <select value={nueva.prioridad} onChange={e => setNueva({ ...nueva, prioridad: e.target.value })}>
-                <option>Crítica</option><option>Alta</option><option>Media</option><option>Baja</option>
-              </select></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Visibilidad</div>
-              <select value={nueva.caracterVisibilidad} onChange={e => setNueva({ ...nueva, caracterVisibilidad: e.target.value })}>
-                <option>Relevante</option><option>No aún</option>
-              </select></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Fecha vencimiento</div>
-              <input type="date" value={nueva.fechaVencimiento} onChange={e => setNueva({ ...nueva, fechaVencimiento: e.target.value })} /></div>
-            <div><div style={{ fontSize: 10, color: "var(--tx3)" }}>Duración (min)</div>
-              <input type="number" value={nueva.duracionMin} onChange={e => setNueva({ ...nueva, duracionMin: e.target.value })} /></div>
-            <div style={{ gridColumn: "span 4" }}><div style={{ fontSize: 10, color: "var(--tx3)" }}>Notas</div>
-              <input type="text" value={nueva.notas} onChange={e => setNueva({ ...nueva, notas: e.target.value })} /></div>
+      {vista === "lista" && tareas && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="card" style={{ padding: 10 }}>
+            <input type="text" value={quickAdd[COLUMNAS[0]] || ""} placeholder={`+ Agregar en "${COLUMNAS[0]}"${filtroPilar !== "todos" ? ` (${PILARES.find(p => p.key === filtroPilar)?.short})` : ""} y Enter`}
+              onChange={e => setQuickAdd(prev => ({ ...prev, [COLUMNAS[0]]: e.target.value }))} onKeyDown={e => e.key === "Enter" && crearRapida(COLUMNAS[0])} />
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button className="primary" onClick={crearCompleta}>Crear</button>
-            <button onClick={() => setShowFull(false)}>Cancelar</button>
-          </div>
-        </div>
-      )}
-
-      {(() => {
-        const modos: Array<"puntual" | "recurrente"> =
-          filtroRec === "puntual" ? ["puntual"] :
-          filtroRec === "recurrente" ? ["recurrente"] :
-          ["puntual", "recurrente"];
-        return modos.map(modo => (
-          <div key={modo} style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: modo === "puntual" ? "var(--pro-t)" : "var(--apr-t)" }}>
-              {modo === "puntual" ? "⚡ Puntuales" : "🔁 Recurrentes"}
-            </div>
-            <div className="kanban-scroll">
-              <div className="kanban-board">
-          {COLUMNAS.map(col => {
-            const items = itemsDe(col, modo);
-            const renderCard = (t: any, i: number) => {
-                  const k = pilarKey(t.epica);
-                  const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
-                  // (card render)
-                  const v = venceInfo(t.fechaVencimiento);
-                  const noAun = t.caracterVisibilidad === "No aún";
-                  const rec = esRecurrente(t);
-                  return (
-                    <div key={t.id}>
-                      {showBar && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2, marginBottom: 6 }} />}
-                      <div
-                        draggable
-                        onDragStart={() => setDrag(t.id)}
-                        onDragEnd={() => { setDrag(null); setDragOver(null); }}
-                        onDragOver={e => {
-                          e.preventDefault(); e.stopPropagation();
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          const before = e.clientY < rect.top + rect.height / 2;
-                          setDragOver({ col, index: before ? i : i + 1 });
-                        }}
-                        onDrop={e => { e.stopPropagation(); onDrop(col, dragOver?.col === col ? dragOver.index : i); }}
-                        style={{
-                          background: "var(--bg3)",
-                          border: "1px solid var(--bd)",
-                          borderLeft: `3px solid var(--${k})`,
-                          borderRadius: 6,
-                          padding: 8,
-                          marginBottom: 6,
-                          cursor: "grab",
-                          opacity: drag === t.id ? 0.4 : (noAun ? 0.6 : 1),
-                        }}>
-                        <div style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
-                          <button
-                            onClick={() => setCaracter(t.id, noAun ? "Relevante" : "No aún")}
-                            title={noAun ? "Marcar relevante" : "Marcar no aún"}
-                            style={{ padding: "0 4px", fontSize: 14, background: "transparent", border: "none", color: noAun ? "var(--tx3)" : "var(--acc)" }}>
-                            {noAun ? "☆" : "★"}
-                          </button>
-                          <div style={{ fontSize: 12, flex: 1, cursor: "pointer" }} onClick={() => setEditId(t.id)}>
-                            {t.nombre}
-                            <span className={`recurr-badge ${rec ? "rec" : "pun"}`}>{rec ? "🔁" : "⚡"}</span>
-                          </div>
-                          <button onClick={() => borrarTarea(t.id)} title="Borrar"
-                            style={{ padding: "0 4px", fontSize: 12, background: "transparent", border: "none", color: "var(--tx3)" }}>×</button>
-                        </div>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                          {t.epica && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)` }}>{t.epica}</span>}
-                          <span className="tag" style={{ background: v.bg, color: `var(--${v.color})` }}>{v.txt}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-            };
+          {COLUMNAS.filter(c => c !== HECHA).map(col => {
+            const items = itemsDe(col);
+            if (!items.length) return null;
             return (
-              <div key={col} className="kanban-col"
-                onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
-                onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
-                style={{ width: colWidth, minWidth: colWidth, background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 400 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
-                  <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
-                </div>
-
-                {items.map((t, i) => renderCard(t, i))}
-
-                {dragOver?.col === col && dragOver.index === items.length && drag && (
-                  <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />
-                )}
-
-                {/* Quick add */}
-                <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
-                  <input
-                    type="text"
-                    value={quickAdd[col] || ""}
-                    onChange={e => setQuickAdd(prev => ({ ...prev, [col]: e.target.value }))}
-                    onKeyDown={e => e.key === "Enter" && crearRapida(col)}
-                    placeholder={filtroPilar !== "todos" ? `+ Nueva ${PILARES.find(p => p.key === filtroPilar)?.emoji}...` : "+ Tarea rápida..."}
-                    style={{ fontSize: 11, padding: "4px 8px" }} />
-                </div>
+              <div key={col}>
+                <div className="seccion-titulo"><span>{col}</span><span>{items.length}</span></div>
+                <div className="card" style={{ padding: "2px 12px" }}>{items.map(t => <Fila key={t.id} t={t} />)}</div>
               </div>
             );
           })}
+          {tareasFiltradas.length === 0 && (
+            <div className="card" style={{ color: "var(--tx3)", textAlign: "center", padding: 20 }}>No hay tareas con estos filtros. Agregá una arriba.</div>
+          )}
+          {itemsDe(HECHA).length > 0 && (
+            <details className="vh-details">
+              <summary className="seccion-titulo"><span>{HECHA} ({itemsDe(HECHA).length})</span><span>›</span></summary>
+              <div className="card" style={{ padding: "2px 12px" }}>{itemsDe(HECHA).slice(0, 30).map(t => <Fila key={t.id} t={t} />)}</div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {vista === "tablero" && (
+        <>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, color: "var(--tx3)", marginBottom: 10 }}>
+            Ancho de columnas:
+            <button onClick={() => setColWidth(w => Math.max(180, w - 40))} style={{ padding: "3px 8px", fontSize: 12 }}>−</button>
+            <button onClick={() => setColWidth(w => Math.min(500, w + 40))} style={{ padding: "3px 8px", fontSize: 12 }}>+</button>
+          </div>
+          {(filtroRec === "todos" ? (["puntual", "recurrente"] as const) : [filtroRec]).map(modo => (
+            <div key={modo} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: modo === "puntual" ? "var(--pro-t)" : "var(--apr-t)" }}>
+                {modo === "puntual" ? "⚡ Una vez" : "🔁 Se repiten"}
+              </div>
+              <div className="kanban-scroll">
+                <div className="kanban-board">
+                  {COLUMNAS.map(col => {
+                    const items = itemsDe(col, modo);
+                    return (
+                      <div key={col} className="kanban-col"
+                        onDragOver={e => { e.preventDefault(); setDragOver({ col, index: items.length }); }}
+                        onDrop={() => onDrop(col, dragOver?.col === col ? dragOver.index : items.length)}
+                        style={{ width: colWidth, minWidth: colWidth, background: "var(--bg2)", border: "1px solid var(--bd)", borderRadius: 10, padding: 10, minHeight: 200 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 6px 10px" }}>
+                          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--tx3)", fontWeight: 600 }}>{col}</div>
+                          <div style={{ fontSize: 11, color: "var(--tx3)" }}>{items.length}</div>
+                        </div>
+                        {items.map((t, i) => {
+                          const k = pilarKey(t.epica);
+                          const showBar = dragOver?.col === col && dragOver.index === i && drag !== t.id;
+                          const v = venceInfo(t.fechaVencimiento);
+                          const noAun = t.caracterVisibilidad === "No aún";
+                          return (
+                            <div key={t.id}>
+                              {showBar && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2, marginBottom: 6 }} />}
+                              <div draggable
+                                onDragStart={() => setDrag(t.id)}
+                                onDragEnd={() => { setDrag(null); setDragOver(null); }}
+                                onDragOver={e => {
+                                  e.preventDefault(); e.stopPropagation();
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  setDragOver({ col, index: e.clientY < rect.top + rect.height / 2 ? i : i + 1 });
+                                }}
+                                onDrop={e => { e.stopPropagation(); onDrop(col, dragOver?.col === col ? dragOver.index : i); }}
+                                onClick={() => setEditId(t.id)}
+                                style={{ background: "var(--bg3)", border: "1px solid var(--bd)", borderLeft: `3px solid var(--${k})`, borderRadius: 6, padding: 8, marginBottom: 6, cursor: "grab", opacity: drag === t.id ? 0.4 : noAun ? 0.6 : 1 }}>
+                                <div style={{ fontSize: 12, marginBottom: 6 }}>{t.nombre}</div>
+                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                  {t.epica && <span className="tag" style={{ background: `var(--${k}-b)`, color: `var(--${k}-t)` }}>{t.epica}</span>}
+                                  {t.fechaVencimiento && <span className="tag" style={{ background: v.bg, color: `var(--${v.color})`, textTransform: "none" }}>{v.txt}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {dragOver?.col === col && dragOver.index === items.length && drag && <div style={{ height: 2, background: "var(--acc)", borderRadius: 2 }} />}
+                        <input type="text" value={quickAdd[col] || ""} placeholder="+ Agregar..." style={{ fontSize: 11, padding: "4px 8px", marginTop: 8 }}
+                          onChange={e => setQuickAdd(prev => ({ ...prev, [col]: e.target.value }))} onKeyDown={e => e.key === "Enter" && crearRapida(col)} />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
+          ))}
+        </>
+      )}
+
+      <details className="vh-details" style={{ marginTop: 12 }}>
+        <summary style={{ fontSize: 12, color: "var(--tx3)" }}>Opciones de vista ›</summary>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, marginTop: 8 }}>
+          <input type="checkbox" checked={verNoAun} onChange={e => setVerNoAun(e.target.checked)} /> Mostrar tareas en pausa (&quot;No aún&quot;)
+        </label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, marginTop: 6 }}>
+          <input type="checkbox" checked={verHabitos} onChange={e => setVerHabitos(e.target.checked)} /> Mostrar hábitos (se manejan en la pantalla Hábitos)
+        </label>
+      </details>
+
+      <Sheet abierto={nuevaAbierta} onCerrar={() => setNuevaAbierta(false)} titulo="Nueva tarea">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Campo label="¿Qué hay que hacer?">
+            <input type="text" autoFocus value={nueva.nombre} onChange={e => setNueva({ ...nueva, nombre: e.target.value })} onKeyDown={e => e.key === "Enter" && crearCompleta()} />
+          </Campo>
+          <Campo label="Pilar">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {PILARES.map(p => (
+                <button key={p.key} className={`vh-chip ${nueva.epica === p.nombre ? "on" : ""}`} onClick={() => setNueva({ ...nueva, epica: p.nombre })}>{p.emoji} {p.short}</button>
+              ))}
+            </div>
+          </Campo>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[["Hoy", 0], ["Mañana", 1], ["En una semana", 7]].map(([l, d]) => {
+              const f = new Date(); f.setDate(f.getDate() + (d as number));
+              const ymd = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+              return <button key={l as string} className={`vh-chip ${nueva.fechaVencimiento === ymd ? "on" : ""}`} onClick={() => setNueva({ ...nueva, fechaVencimiento: nueva.fechaVencimiento === ymd ? "" : ymd })}>{l}</button>;
+            })}
           </div>
-        ));
-      })()}
+          <div className="vh-2">
+            <Campo label="Fecha"><input type="date" value={nueva.fechaVencimiento} onChange={e => setNueva({ ...nueva, fechaVencimiento: e.target.value })} /></Campo>
+            <Campo label="Prioridad">
+              <select value={nueva.prioridad} onChange={e => setNueva({ ...nueva, prioridad: e.target.value })}>
+                <option>Crítica</option><option>Alta</option><option>Media</option><option>Baja</option>
+              </select>
+            </Campo>
+            <Campo label="Columna">
+              <select value={nueva.estado || COLUMNAS[0]} onChange={e => setNueva({ ...nueva, estado: e.target.value })}>
+                {COLUMNAS.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Campo>
+            <Campo label="¿Se repite?">
+              <select value={nueva.recurrente ? nueva.frecuencia : "no"} onChange={e => setNueva({ ...nueva, recurrente: e.target.value !== "no", frecuencia: e.target.value === "no" ? nueva.frecuencia : e.target.value })}>
+                <option value="no">No, una vez</option><option>Diaria</option><option>Semanal</option><option>Quincenal</option><option>Mensual</option>
+              </select>
+            </Campo>
+          </div>
+          <Campo label="Notas (opcional)"><input type="text" value={nueva.notas} onChange={e => setNueva({ ...nueva, notas: e.target.value })} /></Campo>
+          <button className="primary" disabled={!nueva.nombre.trim()} onClick={crearCompleta} style={{ padding: 12 }}>Crear tarea</button>
+        </div>
+      </Sheet>
 
       {editId && <EditTareaModal tareaId={editId} onClose={() => setEditId(null)} onSaved={cargar} />}
+      <Toast data={toast} onCerrar={() => setToast(null)} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ async function recalcRacha(tareaId: string): Promise<number> {
   return r;
 }
 
-// Body: { tareaId, fecha, estado?: "hecho"|"fallado"|"ciclar" }
+// Body: { tareaId, fecha, estado?: "hecho"|"fallado"|"vacio"|"ciclar" }
 // "ciclar" (default): vacío → hecho → fallado → vacío
 export async function POST(req: NextRequest) {
   const { tareaId, fecha, estado } = await req.json();
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   let nuevoEstado: "vacio" | "hecho" | "fallado" = "hecho";
 
-  if (estado === "hecho" || estado === "fallado") {
+  if (estado === "hecho" || estado === "fallado" || estado === "vacio") {
     nuevoEstado = estado;
   } else {
     // ciclar

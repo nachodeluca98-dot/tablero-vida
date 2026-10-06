@@ -10,10 +10,10 @@ export interface Pilar {
 }
 
 export const PILARES: Pilar[] = [
-  { key: "mus", nombre: "Música", short: "Musica", letter: "M", emoji: "🎵" },
+  { key: "mus", nombre: "Música", short: "Música", letter: "M", emoji: "🎵" },
   { key: "fit", nombre: "Actividad física", short: "Fitness", letter: "F", emoji: "🏋️" },
   { key: "sal", nombre: "Nutrición y salud", short: "Salud", letter: "N", emoji: "🥗" },
-  { key: "ges", nombre: "Gestión adulta", short: "Gestion", letter: "G", emoji: "🔨" },
+  { key: "ges", nombre: "Gestión adulta", short: "Gestión", letter: "G", emoji: "🔨" },
   { key: "apr", nombre: "Aprendizaje", short: "Aprender", letter: "A", emoji: "📚" },
   { key: "cre", nombre: "Creator/divulgación", short: "Creator", letter: "C", emoji: "🐉" },
   { key: "pro", nombre: "Profesional", short: "Pro", letter: "P", emoji: "💼" },

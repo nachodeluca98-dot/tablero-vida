@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Lee de la base: sin esto Next.js la congela en el build
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   let s = await prisma.settings.findUnique({ where: { id: "user" } });
   if (!s) s = await prisma.settings.create({ data: { id: "user" } });

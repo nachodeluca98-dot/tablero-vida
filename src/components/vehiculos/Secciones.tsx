@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  CATEGORIA, COLOR_ESTADO, Campo, GraficoRendimiento, PIDE_KM, Stat, TIPO_EMOJI, TIPO_LABEL, Tip, type ToastData,
-  api, fecha, km, kmL, pesos, textoVenc,
+  CATEGORIA, COLOR_ESTADO, GraficoRendimiento, PIDE_KM, TIPO_EMOJI, TIPO_LABEL, fecha, km, kmL, pesos, textoVenc,
 } from "./comun";
+import { Campo, Stat, Tip, type ToastData, api } from "@/components/ui";
 
 const DIA = 86400000;
 
@@ -38,7 +38,7 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
         } : undefined,
       });
     } catch (e: any) {
-      onToast({ titulo: "No se pudo guardar", lineas: [e.message] });
+      onToast({ titulo: "No se pudo guardar", lineas: [e.message], error: true });
     } finally { setEnviando(false); }
   }
 

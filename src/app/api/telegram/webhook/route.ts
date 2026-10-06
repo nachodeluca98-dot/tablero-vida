@@ -9,6 +9,7 @@ import { askCoach } from "@/lib/coach";
 import { PREGUNTAS } from "@/lib/reflexion";
 import { procesarMensajeVehiculo, enviarEstado, enviarVehiculos, enviarUltimo, manejarCallbackVehiculo } from "@/lib/vehiculos/bot";
 import { transcribirAudioTelegram, transcripcionDisponible } from "@/lib/compartido/transcripcion";
+import { DIAS_CORTOS, DIAS_LARGOS, diaSemanaAR } from "@/lib/dias";
 
 async function handleReflexion(text: string, chatId: string): Promise<boolean> {
   const fecha = today();
@@ -65,7 +66,7 @@ function today() {
 
 async function buildHabitsKeyboard() {
   const habitos = await prisma.tarea.findMany({
-    where: { mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
+    where: { tipo: "Hábito", mostrarEnHabitos: true, caracterVisibilidad: "Relevante" },
     include: { habitoLogs: { where: { fecha: today() } } },
     take: 30,
   });
@@ -136,9 +137,9 @@ async function handleCommand(text: string, chatId: string) {
       take: 20,
     });
 
-    const dia = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"][t.getDay()];
+    const dia = DIAS_LARGOS[diaSemanaAR(t)];
     const bloques = await prisma.cronogramaBase.findMany({
-      where: { dia },
+      where: { dia: DIAS_CORTOS[diaSemanaAR(t)] },
       orderBy: { horarioInicio: "asc" },
     });
 
@@ -188,6 +189,7 @@ async function handleCommand(text: string, chatId: string) {
     }
     const habito = await prisma.tarea.findFirst({
       where: {
+        tipo: "Hábito",
         mostrarEnHabitos: true,
         nombre: { contains: args },
       },

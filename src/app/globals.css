@@ -195,3 +195,47 @@ th { color: var(--tx3); font-weight: 600; font-size: 10px; text-transform: upper
 }
 .vh-details > summary { list-style: none; cursor: pointer; }
 .vh-details > summary::-webkit-details-marker { display: none; }
+
+/* ─── Navegación y patrones compartidos ─────────────────────────── */
+.chips-scroll { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.bottom-nav { display: none; }
+.check {
+  width: 22px; height: 22px; border-radius: 999px; padding: 0; flex-shrink: 0;
+  border: 2px solid var(--bd); background: transparent; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: #000;
+}
+.check:hover { border-color: var(--sal); background: transparent; }
+.check.on { background: var(--sal); border-color: var(--sal); }
+.fila { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--bd); }
+.fila:first-of-type { border-top: none; }
+.seccion-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--tx3); font-weight: 600; margin: 4px 2px 8px; display: flex; justify-content: space-between; align-items: center; }
+.app-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 30;
+  background: var(--acc); color: #000; border: none; border-radius: 999px;
+  padding: 14px 20px; font-size: 15px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.app-fab:hover { background: var(--acc); filter: brightness(1.08); }
+
+@media (max-width: 768px) {
+  .app-main { padding-bottom: calc(84px + env(safe-area-inset-bottom)) !important; }
+  .hamburger { display: none !important; }
+  .bottom-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    background: rgba(17,17,20,.96); backdrop-filter: blur(8px); border-top: 1px solid var(--bd);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .bottom-nav a, .bottom-nav button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0;
+    background: none; border: none; color: var(--tx3); font-size: 10px; text-decoration: none; border-radius: 8px;
+  }
+  .bottom-nav .ico { font-size: 19px; line-height: 1; }
+  .bottom-nav .on { color: var(--acc); font-weight: 700; }
+  .vh-fab, .app-fab { bottom: calc(76px + env(safe-area-inset-bottom)) !important; }
+  .vh-toast { bottom: calc(140px + env(safe-area-inset-bottom)) !important; }
+  .app-main { padding-top: 16px !important; }
+}
+@media (max-width: 768px) {
+  body[data-barra-propia] .hamburger { display: block !important; }
+  body[data-barra-propia] .app-main { padding-top: 60px !important; padding-bottom: 12px !important; }
+}
