@@ -632,3 +632,40 @@ model FinAviso {
   @@index([tipo, enviadoAt])
   @@map("fin_avisos")
 }
+
+// ─── Supermercado (docs/modulo-supermercado.md) ───
+
+// Producto de la lista habitual que el script de Coto suma al carrito
+model SuperItem {
+  id        String   @id @default(cuid())
+  nombre    String
+  busquedas String[] // textos para la lupa de Coto, en orden de preferencia
+  criterio  String   @default("primero") // "primero": primer resultado de la primera búsqueda que encuentre algo · "mas_barato": el más barato entre el primero de cada búsqueda
+  cantidad  Float    @default(1)
+  unidad    String   @default("un") // "un" | "kg"
+  opcional  Boolean  @default(false) // "si hay": si no aparece no se avisa como faltante
+  activo    Boolean  @default(true)
+  orden     Int      @default(0)
+  // Producto fijado: si está, se usa directo sin buscar (salvo criterio "mas_barato")
+  cotoUrl    String? @map("coto_url")
+  cotoNombre String? @map("coto_nombre")
+  notas     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("super_items")
+}
+
+// Cada vez que corre el script: qué eligió, qué agregó y qué falló
+model SuperCorrida {
+  id        String   @id @default(cuid())
+  modo      String // "carrito" | "solo_buscar"
+  estado    String // "ok" | "parcial" | "error"
+  total     Float?
+  detalle   Json // [{ itemId, nombre, estado, producto, url, precio, cantidad, nota }]
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("super_corridas")
+}

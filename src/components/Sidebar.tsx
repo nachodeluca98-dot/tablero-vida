@@ -12,6 +12,7 @@ const NAV = [
   { href: "/vencimientos", label: "Vencimientos", ico: "⏰" },
   { href: "/vehiculos", label: "Vehículos", ico: "🚗" },
   { href: "/finanzas", label: "Finanzas", ico: "💰" },
+  { href: "/supermercado", label: "Supermercado", ico: "🛒" },
   { href: "/settings", label: "Ajustes", ico: "⚙️" },
 ];
 

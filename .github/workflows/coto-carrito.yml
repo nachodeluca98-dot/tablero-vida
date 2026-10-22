@@ -1,0 +1,63 @@
+# Arma el carrito de Coto los miércoles con la lista de /supermercado (scripts/coto-carrito.ts).
+# No confirma la compra: deja el carrito listo y avisa por Telegram.
+#
+# Secrets del repo (Settings → Secrets and variables → Actions):
+#   APP_URL        URL de la app en Vercel, ej. https://tablero-vida.vercel.app
+#   CRON_SECRET    el mismo que en Vercel
+#   COTO_USUARIO   mail de la cuenta de Coto Digital
+#   COTO_PASSWORD  contraseña de Coto Digital
+#   CAPTURAS_CLAVE (opcional) clave del .7z con las capturas de cada producto. El repo es público:
+#                  sin esta clave las capturas NO se suben (muestran tu nombre, dirección y carrito)
+# Variable opcional: COTO_SUCURSAL_ID (sucursal para el buscador, default 200)
+
+name: Carrito de Coto
+
+on:
+  schedule:
+    - cron: "7 11 * * 3" # miércoles 8:07 (Argentina, UTC-3)
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "carrito: arma el carrito · solo_buscar: muestra qué elegiría sin tocar el carrito · diagnostico: guarda los controles de la página del producto en las capturas"
+        type: choice
+        options: [carrito, solo_buscar, diagnostico]
+        default: carrito
+
+concurrency:
+  group: coto-carrito
+  cancel-in-progress: false
+
+jobs:
+  carrito:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright-core install --with-deps chromium
+      - run: npx tsx scripts/coto-carrito.ts
+        env:
+          MODO: ${{ inputs.modo || 'carrito' }}
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          COTO_USUARIO: ${{ secrets.COTO_USUARIO }}
+          COTO_PASSWORD: ${{ secrets.COTO_PASSWORD }}
+          COTO_SUCURSAL_ID: ${{ vars.COTO_SUCURSAL_ID || '200' }}
+      - name: Cifrar capturas
+        if: always()
+        env:
+          CLAVE: ${{ secrets.CAPTURAS_CLAVE }}
+        run: |
+          if [ -n "$CLAVE" ] && [ -d capturas ]; then 7z a -p"$CLAVE" -mhe=on capturas.7z capturas > /dev/null; fi
+          rm -rf capturas
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-coto
+          path: capturas.7z
+          retention-days: 14
+          if-no-files-found: ignore
