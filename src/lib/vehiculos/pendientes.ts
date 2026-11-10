@@ -1,5 +1,6 @@
 // Lista de pendientes de todos los vehículos, agrupada por nivel de urgencia
-import { fmtPesos, describirVencimiento, resumenVehiculo, vehiculosActivos, type Vencimiento } from "./core";
+import { prisma } from "@/lib/prisma";
+import { TIPO_EMOJI, fmtFecha, fmtPesos, describirVencimiento, hoyYmd, resumenVehiculo, vehiculosActivos, type Vencimiento } from "./core";
 import { seguroSinVerificar } from "./seguro";
 
 export type Nivel = "urgente" | "importante" | "relevante";
@@ -15,6 +16,9 @@ export type PendienteVehiculo = {
   detalle: string;
   kmHoy: number | null;
   orden: number;
+  // presente si lo anotó el usuario (VehiculoTarea)
+  tareaId?: string;
+  fecha?: string | null;
 };
 
 const TITULO: Record<string, string> = {
@@ -56,7 +60,36 @@ export async function pendientesVehiculos(): Promise<PendienteVehiculo[]> {
     const r = await resumenVehiculo(v.id);
     if (!r) continue;
 
+    const anotadas = await prisma.vehiculoTarea.findMany({ where: { vehiculoId: v.id, hecho: false }, orderBy: { createdAt: "asc" } });
+    const hoy = hoyYmd();
+    for (const t of anotadas) {
+      const f = t.fecha ? t.fecha.toISOString().slice(0, 10) : null;
+      // con fecha de hoy o atrasada sube a urgente
+      const nivel: Nivel = f && f <= hoy ? "urgente" : (t.nivel as Nivel);
+      const dias = f ? Math.round((Date.parse(f) - Date.parse(hoy)) / 86400000) : null;
+      out.push({
+        id: `tarea:${t.id}`,
+        nivel,
+        vehiculoId: v.id,
+        alias: v.alias,
+        tipo: t.tipo,
+        emoji: TIPO_EMOJI[t.tipo] ?? "📌",
+        titulo: t.titulo,
+        detalle: [
+          dias == null ? "Anotado por vos" : dias < 0 ? `Atrasado ${-dias} d` : dias === 0 ? "Para hoy" : dias === 1 ? "Para mañana" : `Para el ${fmtFecha(t.fecha!)}`,
+          t.notas,
+        ].filter(Boolean).join(" · "),
+        kmHoy: r.kmHoy,
+        orden: dias ?? 500,
+        tareaId: t.id,
+        fecha: f,
+      });
+    }
+    // si ya anotó un pendiente del mismo tipo, la alerta automática no se repite
+    const tiposAnotados = new Set(anotadas.map(t => t.tipo));
+
     for (const venc of r.vencimientos) {
+      if (tiposAnotados.has(venc.tipo)) continue;
       const nivel = nivelDe(venc);
       if (!nivel) continue;
       const base = TITULO[venc.tipo] ?? venc.label;

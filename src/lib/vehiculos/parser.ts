@@ -25,6 +25,8 @@ export type DatosMant = {
   fecha: string | null;
 };
 
+export type Imagen = { media_type: "image/jpeg" | "image/png" | "image/webp"; data: string };
+
 export type Parseo = {
   tipo: "carga_combustible" | "mantenimiento" | "consulta" | "desconocido";
   vehiculo_alias: string | null;
@@ -105,6 +107,20 @@ Reglas de interpretación:
 - Si no menciona vehículo, "vehiculo_alias" va null.
 - "ayer", "el lunes", etc: calculá la fecha a partir de hoy. Si no menciona fecha, asumí hoy.
 - Si el mensaje incluye una respuesta a una pregunta previa, combiná ambos.
+
+Si el mensaje trae fotos, leé los datos de ellas:
+- Display del surtidor: "Total a pagar" = monto_total, "Litros" = litros (19.090 en el
+  display son 19,09 litros: el punto o la coma separa decimales), "Precio por litro" del
+  producto encendido. El nombre del producto (Super, Infinia, V-Power, Diesel...) va en
+  "estacion" junto con la marca si se ve (ej. "YPF Infinia").
+- Ticket o factura de estación: total, litros, precio por litro, fecha, estación.
+- Factura o presupuesto de taller: es "mantenimiento"; total = monto, nombre del taller,
+  qué se hizo = descripcion.
+- Foto del tablero del auto: el número del odómetro (no el parcial "trip") = odometro.
+- Si total ÷ litros no coincide con el precio por litro que leíste, confiá en total y
+  litros y dejá precio_litro en null.
+- Con reflejos o números tapados, no adivines: dejá null y agregalo en "falta".
+- La fecha del ticket solo si se lee clara; si no, hoy.
 - Nunca inventes un valor. Si no está, va null.`;
 }
 
@@ -112,6 +128,7 @@ export async function parsearMensaje(
   texto: string,
   vehiculos: Vehiculo[],
   pista?: "carga" | "mantenimiento",
+  imagenes: Imagen[] = [],
 ): Promise<Parseo> {
   const extra = pista === "carga"
     ? "\n\nEl usuario indicó que se trata de una carga de combustible."
@@ -122,7 +139,15 @@ export async function parsearMensaje(
     model: "claude-haiku-4-5",
     max_tokens: 800,
     system: prompt(vehiculos) + extra,
-    messages: [{ role: "user", content: texto }],
+    messages: [{
+      role: "user",
+      content: imagenes.length
+        ? [
+            ...imagenes.map(i => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.media_type, data: i.data } })),
+            { type: "text" as const, text: texto.trim() || "Registrá lo que muestran estas fotos." },
+          ]
+        : texto,
+    }],
   });
   const raw = res.content.filter(b => b.type === "text").map(b => (b as { text: string }).text).join("");
   const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);

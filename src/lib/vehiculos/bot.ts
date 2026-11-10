@@ -366,6 +366,9 @@ export async function manejarCallbackVehiculo(data: string, chatId: string, mess
     if (borrado) {
       await recalcularOdometro(borrado.vehiculoId);
       await (kind === "c" ? quitarCarga(id) : quitarMantenimiento(id));
+      if (kind !== "c") {
+        await prisma.vehiculoTarea.updateMany({ where: { mantenimientoId: id }, data: { hecho: false, hechoAt: null, mantenimientoId: null } });
+      }
     }
     await editTelegramMessage(chatId, messageId, borrado ? "🗑 Registro borrado." : "Ese registro ya no existe.");
     return borrado ? "Borrado" : "No encontrado";
@@ -375,7 +378,28 @@ export async function manejarCallbackVehiculo(data: string, chatId: string, mess
     const [, accion, id] = data.split(":");
     const rec = await prisma.recordatorioVehiculo.findUnique({ where: { id }, include: { vehiculo: true } });
     if (!rec) return "Recordatorio no encontrado";
-    const label = `${TIPO_EMOJI[rec.tipo] ?? ""} ${TIPO_LABEL[rec.tipo] ?? rec.tipo}`;
+    // Recordatorio de un pendiente anotado por el usuario ("tarea:<id>")
+    const tarea = rec.tipo.startsWith("tarea:")
+      ? await prisma.vehiculoTarea.findUnique({ where: { id: rec.tipo.slice(6) } })
+      : null;
+    const label = tarea ? `📝 ${escapeHtml(tarea.titulo)}` : `${TIPO_EMOJI[rec.tipo] ?? ""} ${TIPO_LABEL[rec.tipo] ?? rec.tipo}`;
+
+    if (accion === "hecho" && tarea) {
+      if (tarea.hecho) {
+        await editTelegramMessage(chatId, messageId, `${label}: ya estaba resuelto. ✓`);
+        return "Ya estaba";
+      }
+      const r = await resumenVehiculo(rec.vehiculoId);
+      const km = r?.kmHoy ?? null;
+      const m = await prisma.mantenimiento.create({
+        data: { vehiculoId: rec.vehiculoId, tipo: tarea.tipo, fecha: fechaDesdeYmd(), odometro: km, descripcion: tarea.titulo, fuente: "texto" },
+      });
+      await prisma.vehiculoTarea.update({ where: { id: tarea.id }, data: { hecho: true, hechoAt: new Date(), mantenimientoId: m.id } });
+      await prisma.recordatorioVehiculo.update({ where: { id }, data: { estado: "reconocido" } });
+      await editTelegramMessage(chatId, messageId,
+        `✅ ${label} — resuelto para <b>${escapeHtml(rec.vehiculo.alias)}</b>.\n<i>Quedó con el km estimado. Si querés guardar cuánto salió y dónde, borralo con /ultimo y marcalo desde la app, que te lo pide.</i>`);
+      return "Resuelto";
+    }
 
     if (accion === "hecho") {
       const r = await resumenVehiculo(rec.vehiculoId);

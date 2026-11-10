@@ -15,7 +15,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!v) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
   const kmActual = entero(b.kmActual);
-  if (kmActual != null) await actualizarOdometro(v.id, kmActual, fechaDesdeYmd());
+  if (kmActual != null) {
+    await prisma.vehiculo.update({ where: { id: v.id }, data: { kmManual: kmActual, kmManualFecha: fechaDesdeYmd() } });
+    await actualizarOdometro(v.id, kmActual, fechaDesdeYmd());
+  }
 
   let creados = 0;
   for (const tipo of TIPOS) {
