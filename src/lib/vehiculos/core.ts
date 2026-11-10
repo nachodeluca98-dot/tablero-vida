@@ -252,7 +252,9 @@ export async function recalcularOdometro(vehiculoId: string) {
     prisma.cargaCombustible.findFirst({ where: { vehiculoId, odometro: { not: null } }, orderBy: { odometro: "desc" } }),
     prisma.mantenimiento.findFirst({ where: { vehiculoId, odometro: { not: null } }, orderBy: { odometro: "desc" } }),
   ]);
-  const max = [c, m].filter(Boolean).sort((a, b) => b!.odometro! - a!.odometro!)[0];
+  const v = await prisma.vehiculo.findUnique({ where: { id: vehiculoId }, select: { kmManual: true, kmManualFecha: true } });
+  const manual = v?.kmManual != null ? { odometro: v.kmManual, fecha: v.kmManualFecha ?? new Date() } : null;
+  const max = [c, m, manual].filter(Boolean).sort((a, b) => b!.odometro! - a!.odometro!)[0];
   await prisma.vehiculo.update({
     where: { id: vehiculoId },
     data: { kmActual: max?.odometro ?? null, kmActualFecha: max?.fecha ?? null },

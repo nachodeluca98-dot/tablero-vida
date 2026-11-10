@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CATEGORIA, COLOR_ESTADO, GraficoRendimiento, PIDE_KM, TIPO_EMOJI, TIPO_LABEL, fecha, km, kmL, pesos, textoVenc,
 } from "./comun";
-import { Campo, Stat, Tip, type ToastData, api } from "@/components/ui";
+import { Campo, Stat, Tip, type ToastData, api, ymdLocal } from "@/components/ui";
+import { inferirTipo } from "@/lib/vehiculos/tipos";
 
 const DIA = 86400000;
 
@@ -26,11 +27,11 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
   async function hecho(extra: any = {}) {
     setEnviando(true);
     try {
-      const r = await api(`/api/vehiculos/${p.vehiculoId}/hecho`, "POST", { tipo: p.tipo, ...extra });
+      const r = await api(`/api/vehiculos/${p.vehiculoId}/hecho`, "POST", { tipo: p.tipo, tareaId: p.tareaId, ...extra });
       setAbierto(false);
       onListo();
       onToast({
-        titulo: p.tipo === "seguro" ? "✓ Seguro del mes verificado" : `✓ Hecho: ${TIPO_LABEL[p.tipo] ?? p.tipo}`,
+        titulo: p.tipo === "seguro" ? "✓ Seguro del mes verificado" : `✓ Hecho: ${p.tareaId ? p.titulo : TIPO_LABEL[p.tipo] ?? p.tipo}`,
         lineas: r.feedback,
         deshacer: r.id ? async () => {
           await api(`/api/vehiculos/${p.vehiculoId}/registros?kind=mantenimiento&rid=${r.id}`, "DELETE");
@@ -51,12 +52,25 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
     onToast({ titulo: `✓ Seguro actualizado: ${pesos(n)}/mes` });
   }
 
+  async function borrar() {
+    await api(`/api/vehiculos/${p.vehiculoId}/tareas/${p.tareaId}`, "DELETE");
+    onListo();
+    onToast({
+      titulo: "Pendiente borrado", lineas: [p.titulo],
+      deshacer: async () => {
+        await api(`/api/vehiculos/${p.vehiculoId}/tareas`, "POST", { titulo: p.titulo, tipo: p.tipo, nivel: p.nivel, fecha: p.fecha });
+        onListo();
+      },
+    });
+  }
+
+  const [taller, setTaller] = useState("");
   const btn = { fontSize: 12, padding: "5px 10px" };
   return (
     <div style={{ padding: "7px 0" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>{p.emoji} {p.titulo}</div>
+          <div style={{ fontWeight: 600 }}>{p.emoji} {p.titulo}{p.tareaId && <span title="Anotado por vos" style={{ fontSize: 11, marginLeft: 4 }}>📝</span>}</div>
           <div style={{ fontSize: 11, color: "var(--tx3)" }}>{mostrarAlias ? `${p.alias} · ` : ""}{p.detalle}</div>
         </div>
         {!abierto && (
@@ -67,7 +81,10 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
                 <button style={btn} onClick={cambioSeguro}>Cambió</button>
               </>
             ) : (
-              <button style={btn} disabled={enviando} onClick={() => (PIDE_KM.has(p.tipo) ? setAbierto(true) : hecho())}>✓ Hecho</button>
+              <>
+                <button style={btn} disabled={enviando} onClick={() => (PIDE_KM.has(p.tipo) || p.tareaId ? setAbierto(true) : hecho())}>✓ Hecho</button>
+                {p.tareaId && <button style={{ ...btn, padding: "5px 8px", color: "var(--tx3)" }} onClick={borrar} aria-label="Borrar pendiente">✕</button>}
+              </>
             )}
           </div>
         )}
@@ -76,7 +93,8 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
         <div className="vh-2" style={{ marginTop: 8, alignItems: "end" }}>
           <Campo label="Km del auto"><input type="number" inputMode="numeric" value={kmVal} onChange={e => setKmVal(e.target.value)} /></Campo>
           <Campo label="Cuánto salió $"><input type="number" inputMode="numeric" value={monto} onChange={e => setMonto(e.target.value)} /></Campo>
-          <button className="primary" style={btn} disabled={enviando} onClick={() => hecho({ odometro: kmVal, monto })}>Guardar</button>
+          {p.tareaId && <Campo label="Dónde (opcional)" full><input type="text" value={taller} onChange={e => setTaller(e.target.value)} /></Campo>}
+          <button className="primary" style={btn} disabled={enviando} onClick={() => hecho({ odometro: kmVal, monto, taller })}>Guardar</button>
           <button style={btn} onClick={() => setAbierto(false)}>Cancelar</button>
         </div>
       )}
@@ -84,15 +102,84 @@ function ItemPendiente({ p, mostrarAlias, onListo, onToast }: {
   );
 }
 
-export function Pendientes({ items, variosVehiculos, onListo, onToast }: {
-  items: any[]; variosVehiculos: boolean; onListo: () => void; onToast: (t: ToastData) => void;
+const CUANDO = [
+  { key: "hoy", label: "Hoy", dias: 0 },
+  { key: "semana", label: "Esta semana", dias: 7 },
+  { key: "sin", label: "Sin fecha", dias: null },
+] as const;
+
+function NuevoPendiente({ vehiculoId, onListo, onToast, onCerrar }: {
+  vehiculoId: string; onListo: () => void; onToast: (t: ToastData) => void; onCerrar: () => void;
+}) {
+  const [titulo, setTitulo] = useState("");
+  const [nivel, setNivel] = useState<"urgente" | "importante" | "relevante">("importante");
+  const [cuando, setCuando] = useState<(typeof CUANDO)[number]["key"]>("sin");
+  const [guardando, setGuardando] = useState(false);
+  const tipo = titulo.trim() ? inferirTipo(titulo) : null;
+
+  async function agregar() {
+    if (!titulo.trim()) return;
+    setGuardando(true);
+    const c = CUANDO.find(x => x.key === cuando)!;
+    let fecha: string | null = null;
+    if (c.dias != null) { const f = new Date(); f.setDate(f.getDate() + c.dias); fecha = ymdLocal(f); }
+    try {
+      await api(`/api/vehiculos/${vehiculoId}/tareas`, "POST", { titulo: titulo.trim(), nivel, fecha });
+      onToast({ titulo: "📝 Anotado", lineas: [titulo.trim()] });
+      setTitulo("");
+      onListo();
+    } catch (e: any) {
+      onToast({ titulo: "No se pudo anotar", lineas: [e.message], error: true });
+    } finally { setGuardando(false); }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--bd)", marginTop: 6, paddingTop: 10 }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input type="text" autoFocus value={titulo} placeholder="Ej: cambio de sensor de temperatura" onChange={e => setTitulo(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && agregar()} style={{ flex: 1, minWidth: 0 }} />
+        <button className="primary" disabled={guardando || !titulo.trim()} onClick={agregar}>Agregar</button>
+      </div>
+      {tipo && (
+        <div style={{ fontSize: 11, color: "var(--tx3)", marginTop: 6 }}>
+          {TIPO_EMOJI[tipo]} Al resolverlo se registra como <b>{TIPO_LABEL[tipo]}</b>
+          {tipo !== "reparacion" && tipo !== "otro" ? " y reemplaza su alerta automática" : ""}.
+        </div>
+      )}
+      <div className="chips-scroll" style={{ marginTop: 8 }}>
+        {NIVELES.map(n => (
+          <button key={n.key} className={`vh-chip ${nivel === n.key ? "on" : ""}`} onClick={() => setNivel(n.key)}
+            style={nivel === n.key ? { background: `var(--${n.color})`, borderColor: `var(--${n.color})` } : { borderLeft: `3px solid var(--${n.color})` }}>{n.label}</button>
+        ))}
+      </div>
+      <div className="chips-scroll" style={{ marginTop: 6 }}>
+        {CUANDO.map(c => <button key={c.key} className={`vh-chip ${cuando === c.key ? "on" : ""}`} onClick={() => setCuando(c.key)}>{c.label}</button>)}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <span style={{ fontSize: 11, color: "var(--tx3)" }}>Podés anotar varios seguidos. Con fecha, el bot te lo recuerda ese día.</span>
+        <button onClick={onCerrar} style={{ border: "none", background: "none", color: "var(--tx2)", fontSize: 12, padding: 0 }}>Listo</button>
+      </div>
+    </div>
+  );
+}
+
+export function Pendientes({ items, vehiculoId, variosVehiculos, onListo, onToast }: {
+  items: any[]; vehiculoId: string; variosVehiculos: boolean; onListo: () => void; onToast: (t: ToastData) => void;
 }) {
   const [verTodo, setVerTodo] = useState(false);
+  const [anotando, setAnotando] = useState(false);
+  const botonAnotar = !anotando && (
+    <button onClick={() => setAnotando(true)} style={{ fontSize: 12, padding: "4px 10px", flexShrink: 0 }}>+ Pendiente</button>
+  );
   if (!items.length) {
     return (
-      <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", borderColor: "rgba(34,197,94,.35)", padding: 12 }}>
-        <span style={{ fontSize: 20 }}>✨</span>
-        <div><div style={{ fontWeight: 600, color: "var(--sal-t)" }}>Todo al día</div><div style={{ fontSize: 12, color: "var(--tx3)" }}>No hay nada vencido ni por vencer.</div></div>
+      <div className="card" style={{ borderColor: "rgba(34,197,94,.35)", padding: 12 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <span style={{ fontSize: 20 }}>✨</span>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 600, color: "var(--sal-t)" }}>Todo al día</div><div style={{ fontSize: 12, color: "var(--tx3)" }}>No hay nada vencido ni por vencer.</div></div>
+          {botonAnotar}
+        </div>
+        {anotando && <NuevoPendiente vehiculoId={vehiculoId} onListo={onListo} onToast={onToast} onCerrar={() => setAnotando(false)} />}
       </div>
     );
   }
@@ -101,6 +188,11 @@ export function Pendientes({ items, variosVehiculos, onListo, onToast }: {
   const peor = NIVELES.find(n => items.some(i => i.nivel === n.key))!;
   return (
     <div className="card" style={{ padding: "10px 12px", borderColor: `var(--${peor.color})` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+        <span className="card-title" style={{ margin: 0 }}>Pendientes</span>
+        {botonAnotar}
+      </div>
+      {anotando && <NuevoPendiente vehiculoId={vehiculoId} onListo={onListo} onToast={onToast} onCerrar={() => setAnotando(false)} />}
       {NIVELES.map(n => {
         const lista = visibles.filter(i => i.nivel === n.key);
         const total = items.filter(i => i.nivel === n.key).length;
@@ -259,7 +351,8 @@ export function Historial({ historial, onBorrar }: { historial: any[]; onBorrar:
                         {fecha(h.fecha)}{h.odometro != null ? ` · ${km(h.odometro)} km` : ""}
                         {h.kind === "carga" && h.precioLitro ? ` · ${pesos(h.precioLitro)}/L` : ""}
                         {h.taller ? ` · ${h.taller}` : ""}
-                        {h.fuente === "voz" ? " · 🎙" : h.fuente === "texto" ? " · 💬" : ""}
+                        {h.kind === "carga" && h.estacion ? ` · ${h.estacion}` : ""}
+                        {h.fuente === "voz" ? " · 🎙" : h.fuente === "texto" ? " · 💬" : h.fuente === "foto" ? " · 📷" : ""}
                       </div>
                     </div>
                   </div>

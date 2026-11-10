@@ -7,7 +7,7 @@ import { quitarCarga, quitarMantenimiento, sincronizarCarga, sincronizarMantenim
 export const dynamic = "force-dynamic";
 
 const num = (x: unknown) => (x === "" || x == null ? null : Number(x));
-const FUENTES = new Set(["formulario", "texto", "voz"]);
+const FUENTES = new Set(["formulario", "texto", "voz", "foto"]);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const b = await req.json();
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         precioLitro: monto ? monto / litros : null,
         odometro: odometro != null ? Math.round(odometro) : null,
         tanqueLleno: b.tanqueLleno !== false,
+        estacion: typeof b.estacion === "string" && b.estacion.trim() ? b.estacion.trim().slice(0, 80) : null,
         fuente,
         rawInput,
       },
@@ -74,7 +75,11 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     if (count) await quitarCarga(rid);
   } else if (kind === "mantenimiento") {
     const { count } = await prisma.mantenimiento.deleteMany({ where: { id: rid, vehiculoId: params.id } });
-    if (count) await quitarMantenimiento(rid);
+    if (count) {
+      await quitarMantenimiento(rid);
+      // si venía de un pendiente anotado, el pendiente vuelve a quedar abierto
+      await prisma.vehiculoTarea.updateMany({ where: { mantenimientoId: rid }, data: { hecho: false, hechoAt: null, mantenimientoId: null } });
+    }
   }
   else return NextResponse.json({ error: "kind inválido" }, { status: 400 });
   await recalcularOdometro(params.id);

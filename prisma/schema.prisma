@@ -146,10 +146,14 @@ model Vehiculo {
   porDefecto     Boolean                @default(false)
   seguroMensual  Float?
   seguroCompania String?
+  // última lectura de km cargada a mano (alta o estado inicial): piso al recalcular tras borrar registros
+  kmManual       Int?
+  kmManualFecha  DateTime?
   cargas         CargaCombustible[]
   mantenimientos Mantenimiento[]
   reglas         ReglaMantenimiento[]
   recordatorios  RecordatorioVehiculo[]
+  tareas         VehiculoTarea[]
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 }
@@ -631,4 +635,23 @@ model FinAviso {
 
   @@index([tipo, enviadoAt])
   @@map("fin_avisos")
+}
+
+// Pendientes que anota el usuario (además de las alertas automáticas por reglas)
+model VehiculoTarea {
+  id              String    @id @default(cuid())
+  vehiculoId      String
+  vehiculo        Vehiculo  @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  titulo          String
+  tipo            String    @default("reparacion") // mismo set que Mantenimiento.tipo
+  nivel           String    @default("importante") // urgente | importante | relevante
+  fecha           DateTime?
+  notas           String?
+  hecho           Boolean   @default(false)
+  hechoAt         DateTime?
+  mantenimientoId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([vehiculoId, hecho])
 }

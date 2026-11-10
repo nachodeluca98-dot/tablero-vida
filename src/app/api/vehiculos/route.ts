@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
       patente: b.patente?.trim().toUpperCase() || null,
       kmActual,
       kmActualFecha: kmActual != null ? new Date() : null,
+      kmManual: kmActual,
+      kmManualFecha: kmActual != null ? new Date() : null,
       porDefecto: hayOtros === 0,
     },
   });

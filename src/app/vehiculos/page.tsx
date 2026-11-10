@@ -173,7 +173,7 @@ export default function Vehiculos() {
               </div>
 
               {activos.length > 0 && (
-                <Pendientes items={pendientes.filter(x => x.vehiculoId === v.id)} variosVehiculos={false} onListo={refrescar} onToast={setToast} />
+                <Pendientes items={pendientes.filter(x => x.vehiculoId === v.id)} vehiculoId={v.id} variosVehiculos={false} onListo={refrescar} onToast={setToast} />
               )}
 
               <PrimerosPasos det={det} onEstado={() => setEstado(true)} onCarga={() => abrirCarga({ opcion: "carga" })} />

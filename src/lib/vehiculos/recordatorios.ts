@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { escapeHtml } from "@/lib/telegram";
 import { notificar } from "@/lib/compartido/canal";
-import { describirVencimiento, resumenVehiculo, vehiculosActivos } from "./core";
+import { describirVencimiento, hoyYmd, resumenVehiculo, vehiculosActivos } from "./core";
 
 const DIA = 86400000;
 // No repetir el mismo aviso antes de estos días según cómo quedó el anterior
@@ -14,9 +14,13 @@ export async function revisarRecordatoriosVehiculos() {
   for (const v of vehiculos) {
     const r = await resumenVehiculo(v.id);
     if (!r) continue;
+    const abiertas = await prisma.vehiculoTarea.findMany({ where: { vehiculoId: v.id, hecho: false } });
+    const tiposAnotados = new Set(abiertas.map(t => t.tipo));
 
     for (const venc of r.vencimientos) {
       if (venc.estado !== "vencido" && venc.estado !== "proximo") continue;
+      // ya lo anotó como pendiente: se avisa por ese pendiente, no por la regla
+      if (tiposAnotados.has(venc.tipo)) continue;
 
       const previo = await prisma.recordatorioVehiculo.findFirst({
         where: { vehiculoId: v.id, tipo: venc.tipo },
@@ -40,6 +44,25 @@ export async function revisarRecordatoriosVehiculos() {
         { text: "✅ Ya lo hice", callback_data: `vr:hecho:${rec.id}` },
         { text: "⏰ En una semana", callback_data: `vr:pos:${rec.id}` },
       ]]);
+      enviados++;
+    }
+
+    // Pendientes anotados con fecha de hoy o atrasada: un aviso por día
+    const hoy = hoyYmd();
+    for (const t of abiertas) {
+      if (!t.fecha || t.fecha.toISOString().slice(0, 10) > hoy) continue;
+      const tipo = `tarea:${t.id}`;
+      const previo = await prisma.recordatorioVehiculo.findFirst({ where: { vehiculoId: v.id, tipo }, orderBy: { enviadoAt: "desc" } });
+      if (previo && Date.now() - +previo.enviadoAt < (previo.estado === "pospuesto" ? 7 : 1) * DIA - 3600000) continue;
+      const rec = await prisma.recordatorioVehiculo.create({ data: { vehiculoId: v.id, tipo, canal: "telegram" } });
+      const atrasado = t.fecha.toISOString().slice(0, 10) < hoy;
+      await notificar(
+        `📝 ${atrasado ? "Pendiente atrasado" : "Pendiente para hoy"}: <b>${escapeHtml(t.titulo)}</b> — ${escapeHtml(v.alias)}\n\n¿Ya lo hiciste?`,
+        [[
+          { text: "✅ Ya lo hice", callback_data: `vr:hecho:${rec.id}` },
+          { text: "⏰ En una semana", callback_data: `vr:pos:${rec.id}` },
+        ]],
+      );
       enviados++;
     }
   }

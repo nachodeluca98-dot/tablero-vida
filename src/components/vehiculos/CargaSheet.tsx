@@ -40,8 +40,29 @@ const OPCIONES: Record<Opcion, { emoji: string; titulo: string; sub: string; gui
 
 const vacio = (tipo = "service") => ({
   fecha: hoy(), litros: "", monto: "", odometro: "", tanqueLleno: true,
-  tipo, descripcion: "", taller: "", notas: "", venceFecha: "",
+  tipo, descripcion: "", taller: "", notas: "", venceFecha: "", estacion: "",
 });
+
+type Foto = { media_type: "image/jpeg"; data: string; url: string };
+
+// Achica la foto en el celular antes de mandarla: menos datos y respuesta más rápida
+async function achicarFoto(file: File): Promise<Foto> {
+  const src = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const escala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * escala);
+    canvas.height = Math.round(img.naturalHeight * escala);
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/jpeg", 0.82);
+    return { media_type: "image/jpeg", data: url.slice(url.indexOf(",") + 1), url };
+  } finally {
+    URL.revokeObjectURL(src);
+  }
+}
 
 export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, preset, onGuardado }: {
   abierto: boolean;
@@ -56,7 +77,11 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
   const [vid, setVid] = useState<string | null>(vehiculoId);
   const [f, setF] = useState<any>(vacio());
   const [texto, setTexto] = useState("");
-  const [origen, setOrigen] = useState<{ fuente: "texto" | "voz"; raw: string } | null>(null);
+  const [origen, setOrigen] = useState<{ fuente: "texto" | "voz" | "foto"; raw: string } | null>(null);
+  const [fotos, setFotos] = useState<Foto[]>([]);
+  const fotoRef = useRef<HTMLInputElement>(null);
+  // desde el primer paso la foto decide sola si es nafta o taller
+  const sinPista = useRef(false);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [avisos, setAvisos] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -77,7 +102,7 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
     setOpcion(op);
     setVid(vehiculoId);
     setF(vacio(preset?.tipo ?? (op === "reparacion" ? "reparacion" : "service")));
-    setTexto(""); setOrigen(null); setMarcados(new Set()); setAvisos([]); setError(""); setOcupado(""); setEscuchando(false);
+    setTexto(""); setOrigen(null); setFotos([]); setMarcados(new Set()); setAvisos([]); setError(""); setOcupado(""); setEscuchando(false);
     setPaso(preset?.manual ? "revisar" : preset ? "contar" : "tipo");
   }, [abierto, preset, vehiculoId]);
 
@@ -91,11 +116,15 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
     setPaso("contar");
   }
 
-  async function interpretar(t: string, fuente: "texto" | "voz") {
-    if (!t.trim()) return;
+  async function interpretar(t: string, fuente: "texto" | "voz" | "foto", imgs: Foto[] = []) {
+    if (!t.trim() && !imgs.length) return;
     setError(""); setAvisos([]); setOcupado("interpretando");
     try {
-      const r = await api("/api/vehiculos/interpretar", "POST", { texto: t, vehiculoId: vid, kind });
+      const r = await api("/api/vehiculos/interpretar", "POST", {
+        texto: t, vehiculoId: vid, kind: sinPista.current ? undefined : kind,
+        imagenes: imgs.map(({ media_type, data }) => ({ media_type, data })),
+      });
+      sinPista.current = false;
       const v = r.valores;
       if (r.kind === "carga") setOpcion("carga");
       else if (opcion === "carga") setOpcion(v.tipo === "reparacion" ? "reparacion" : "mantenimiento");
@@ -111,16 +140,32 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
         taller: v.taller ?? "",
         notas: v.notas ?? "",
         venceFecha: v.venceFecha ?? "",
+        estacion: v.estacion ?? "",
       });
       setMarcados(new Set(r.faltan));
       setAvisos(r.avisos ?? []);
-      setOrigen({ fuente, raw: t });
+      setOrigen({ fuente, raw: t || `${imgs.length} foto${imgs.length > 1 ? "s" : ""}` });
       if (r.vehiculoId) setVid(r.vehiculoId);
       setPaso("revisar");
     } catch (e: any) {
       setError(e.message);
     } finally {
       setOcupado("");
+    }
+  }
+
+  async function fotosElegidas(files: FileList | null) {
+    if (!files?.length) return;
+    setError("");
+    try {
+      const imgs = await Promise.all(Array.from(files).slice(0, 3).map(achicarFoto));
+      setFotos(imgs);
+      await interpretar(texto, "foto", imgs);
+    } catch {
+      setError("No pude abrir esa foto. Probá sacarla de nuevo o elegir otra.");
+      setOcupado("");
+    } finally {
+      if (fotoRef.current) fotoRef.current.value = "";
     }
   }
 
@@ -204,8 +249,19 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
               </span>
             </button>
           ))}
+          <button className="vh-big" disabled={ocupado === "interpretando"} onClick={() => { sinPista.current = true; fotoRef.current?.click(); }}
+            style={{ borderStyle: "dashed" }}>
+            <span style={{ fontSize: 26 }}>{ocupado === "interpretando" ? "⏳" : "📷"}</span>
+            <span>
+              <div>{ocupado === "interpretando" ? "Leyendo la foto..." : "Desde una foto"}</div>
+              <div style={{ fontSize: 12, color: "var(--tx3)", fontWeight: 400 }}>Surtidor, ticket, factura del taller o el tablero</div>
+            </span>
+          </button>
+          {error && <div style={{ color: "var(--red-t)", fontSize: 12 }}>{error}</div>}
         </div>
       )}
+
+      <input ref={fotoRef} type="file" accept="image/*" multiple hidden onChange={e => fotosElegidas(e.target.files)} />
 
       {paso === "contar" && (
         <div>
@@ -223,6 +279,12 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
               </div>
               {escuchando && texto && <div style={{ fontSize: 13, color: "var(--tx)", marginTop: 8 }}>&quot;{texto}&quot;</div>}
             </div>
+          )}
+
+          {!escuchando && (
+            <button onClick={() => fotoRef.current?.click()} disabled={ocupado === "interpretando"} style={{ width: "100%", marginBottom: 10, padding: 10 }}>
+              📷 {opcion === "carga" ? "Sacale una foto al surtidor o al ticket" : "Sacale una foto a la factura"}
+            </button>
           )}
 
           {!escuchando && (
@@ -251,7 +313,13 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
         <div>
           {origen && (
             <div style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>
-              {origen.fuente === "voz" ? "🎙" : "💬"} &quot;{origen.raw.length > 140 ? origen.raw.slice(0, 140) + "…" : origen.raw}&quot;
+              {origen.fuente === "foto" ? (
+                <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (data URL), no pasa por el optimizador */}
+                  {fotos.map((ft, i) => <img key={i} src={ft.url} alt={`Foto ${i + 1}`} style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: "1px solid var(--bd)" }} />)}
+                  <span style={{ alignSelf: "center" }}>📷 Leído de la foto{fotos.length > 1 ? "s" : ""}</span>
+                </div>
+              ) : <>{origen.fuente === "voz" ? "🎙" : "💬"} &quot;{origen.raw.length > 140 ? origen.raw.slice(0, 140) + "…" : origen.raw}&quot;</>}
               <div style={{ color: "var(--tx2)", marginTop: 4 }}>Revisá que esté bien y guardá.</div>
             </div>
           )}
@@ -263,6 +331,7 @@ export default function CargaSheet({ abierto, onCerrar, vehiculos, vehiculoId, p
               {input("monto", "Pagaste $")}
               {input("odometro", "Km del auto")}
               {input("fecha", "Fecha", "date")}
+              {input("estacion", "Estación / combustible (opcional)", "text", true)}
               <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, gridColumn: "1 / -1" }}>
                 <input type="checkbox" checked={f.tanqueLleno} onChange={e => cambiar("tanqueLleno", e.target.checked)} />
                 Llené el tanque
